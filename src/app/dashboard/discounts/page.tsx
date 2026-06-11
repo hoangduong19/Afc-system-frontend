@@ -1,0 +1,410 @@
+"use client";
+
+import React, { useState } from "react";
+import {
+  Tag,
+  Plus,
+  Search,
+  Edit2,
+  Power,
+  CheckCircle,
+  XCircle,
+  X,
+  Percent
+} from "lucide-react";
+
+interface FareDiscount {
+  id: string;
+  passengerType: "STUDENT" | "SENIOR" | "PRIORITY";
+  discountType: "PERCENT" | "FIXED";
+  discountValue: number;
+  effectiveFrom: string;
+  effectiveTo: string;
+  status: "ACTIVE" | "INACTIVE";
+}
+
+export default function DiscountsPage() {
+  const [discounts, setDiscounts] = useState<FareDiscount[]>([
+    {
+      id: "ds-1",
+      passengerType: "STUDENT",
+      discountType: "PERCENT",
+      discountValue: 50, // 50% discount
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-12-31",
+      status: "ACTIVE"
+    },
+    {
+      id: "ds-2",
+      passengerType: "SENIOR",
+      discountType: "PERCENT",
+      discountValue: 30, // 30% discount
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-12-31",
+      status: "ACTIVE"
+    },
+    {
+      id: "ds-3",
+      passengerType: "PRIORITY",
+      discountType: "PERCENT",
+      discountValue: 100, // 100% discount (Free)
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-12-31",
+      status: "ACTIVE"
+    }
+  ]);
+
+  const [passengerFilter, setPassengerFilter] = useState("ALL");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"CREATE" | "EDIT">("CREATE");
+  const [selectedDiscount, setSelectedDiscount] = useState<FareDiscount | null>(null);
+
+  // Form State
+  const [passengerType, setPassengerType] = useState<"STUDENT" | "SENIOR" | "PRIORITY">("STUDENT");
+  const [discountType, setDiscountType] = useState<"PERCENT" | "FIXED">("PERCENT");
+  const [discountValue, setDiscountValue] = useState(50);
+  const [effectiveFrom, setEffectiveFrom] = useState("2026-01-01");
+  const [effectiveTo, setEffectiveTo] = useState("2026-12-31");
+
+  const handleOpenCreateModal = () => {
+    setModalMode("CREATE");
+    setPassengerType("STUDENT");
+    setDiscountType("PERCENT");
+    setDiscountValue(50);
+    setEffectiveFrom("2026-01-01");
+    setEffectiveTo("2026-12-31");
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (ds: FareDiscount) => {
+    setSelectedDiscount(ds);
+    setModalMode("EDIT");
+    setPassengerType(ds.passengerType);
+    setDiscountType(ds.discountType);
+    setDiscountValue(ds.discountValue);
+    setEffectiveFrom(ds.effectiveFrom);
+    setEffectiveTo(ds.effectiveTo);
+    setIsModalOpen(true);
+  };
+
+  const handleToggleStatus = (id: string) => {
+    setDiscounts(
+      discounts.map((ds) =>
+        ds.id === id ? { ...ds, status: ds.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" } : ds
+      )
+    );
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (modalMode === "CREATE") {
+      const newDs: FareDiscount = {
+        id: `ds-${Date.now()}`,
+        passengerType,
+        discountType,
+        discountValue,
+        effectiveFrom,
+        effectiveTo,
+        status: "ACTIVE"
+      };
+      setDiscounts([...discounts, newDs]);
+    } else if (modalMode === "EDIT" && selectedDiscount) {
+      setDiscounts(
+        discounts.map((ds) =>
+          ds.id === selectedDiscount.id
+            ? { ...ds, passengerType, discountType, discountValue, effectiveFrom, effectiveTo }
+            : ds
+        )
+      );
+    }
+    setIsModalOpen(false);
+  };
+
+  const filteredDiscounts = discounts.filter((ds) => {
+    return passengerFilter === "ALL" || ds.passengerType === passengerFilter;
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-on-surface flex items-center gap-2">
+            <Tag className="h-6 w-6 text-secondary" /> Quản lý Chính sách giảm giá
+          </h2>
+          <p className="text-sm text-on-surface-variant">
+            Cấu hình tỷ lệ miễn giảm giá vé đối với các nhóm đối tượng đặc biệt (Học sinh/Sinh viên, Người lớn tuổi, Người có công).
+          </p>
+        </div>
+        <button
+          onClick={handleOpenCreateModal}
+          className="flex items-center gap-2 px-4 py-2 bg-secondary text-on-secondary rounded-full hover:opacity-90 transition-opacity font-label-caps text-xs uppercase cursor-pointer"
+        >
+          <Plus className="h-4 w-4" /> Thêm miễn giảm mới
+        </button>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-grid-gutter">
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm flex items-center justify-between">
+          <div>
+            <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
+              Nhóm học sinh / SV (STUDENT)
+            </h3>
+            <div className="text-3xl font-bold text-secondary-fixed-dim">
+              {discounts.find((d) => d.passengerType === "STUDENT" && d.status === "ACTIVE")?.discountValue || 0}%
+            </div>
+          </div>
+          <Percent className="h-10 w-10 text-outline opacity-40" />
+        </div>
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
+          <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
+            Nhóm người cao tuổi (SENIOR)
+          </h3>
+          <div className="text-3xl font-bold text-tertiary-fixed-dim">
+            {discounts.find((d) => d.passengerType === "SENIOR" && d.status === "ACTIVE")?.discountValue || 0}%
+          </div>
+        </div>
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
+          <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
+            Nhóm ưu tiên (PRIORITY)
+          </h3>
+          <div className="text-3xl font-bold text-error">
+            {discounts.find((d) => d.passengerType === "PRIORITY" && d.status === "ACTIVE")?.discountValue || 0}% (FREE)
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 shadow-sm flex items-center justify-between">
+        <div className="text-sm text-on-surface-variant font-medium">Bộ lọc hiển thị:</div>
+        <div className="flex gap-2">
+          <select
+            value={passengerFilter}
+            onChange={(e) => setPassengerFilter(e.target.value)}
+            className="bg-surface-container-high border-none rounded-md py-1.5 px-3 font-body-sm text-body-sm text-on-surface outline-none cursor-pointer w-52 animate-pulse-once"
+          >
+            <option value="ALL">Tất cả nhóm hành khách</option>
+            <option value="STUDENT">Học sinh / Sinh viên (STUDENT)</option>
+            <option value="SENIOR">Người cao tuổi (SENIOR)</option>
+            <option value="PRIORITY">Đối tượng ưu tiên (PRIORITY)</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Data Table */}
+      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden flex flex-col">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-surface-container-low border-b border-outline-variant text-[11px]">
+                <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
+                  Nhóm hành khách
+                </th>
+                <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
+                  Cách thức giảm giá
+                </th>
+                <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
+                  Mức giảm giá
+                </th>
+                <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
+                  Hiệu lực từ - đến
+                </th>
+                <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
+                  Trạng thái
+                </th>
+                <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
+                  Thao tác
+                </th>
+              </tr>
+            </thead>
+            <tbody className="font-body-sm text-body-sm text-xs">
+              {filteredDiscounts.length > 0 ? (
+                filteredDiscounts.map((ds) => (
+                  <tr
+                    key={ds.id}
+                    className="border-b border-outline-variant hover:bg-surface-container-low transition-colors h-[48px]"
+                  >
+                    <td className="p-table-cell-padding text-on-surface font-semibold">
+                      {ds.passengerType}
+                    </td>
+                    <td className="p-table-cell-padding text-on-surface-variant font-medium">
+                      {ds.discountType === "PERCENT" ? "Giảm theo phần trăm (%)" : "Giảm trừ tiền mặt cố định (đ)"}
+                    </td>
+                    <td className="p-table-cell-padding text-right font-data-mono text-on-surface font-bold text-tertiary-fixed-dim">
+                      {ds.discountType === "PERCENT" ? `${ds.discountValue}%` : `₫ ${ds.discountValue.toLocaleString()}`}
+                    </td>
+                    <td className="p-table-cell-padding font-data-mono text-on-surface-variant">
+                      {ds.effectiveFrom} / {ds.effectiveTo}
+                    </td>
+                    <td className="p-table-cell-padding">
+                      <span
+                        className={`px-2.5 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${
+                          ds.status === "ACTIVE"
+                            ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
+                            : "bg-error-container text-on-error-container"
+                        }`}
+                      >
+                        {ds.status === "ACTIVE" ? (
+                          <>
+                            <CheckCircle className="h-3 w-3" /> ACTIVE
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="h-3 w-3" /> INACTIVE
+                          </>
+                        )}
+                      </span>
+                    </td>
+                    <td className="p-table-cell-padding text-right">
+                      <div className="inline-flex gap-2">
+                        <button
+                          onClick={() => handleOpenEditModal(ds)}
+                          className="p-1 hover:bg-surface-container-high rounded text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
+                          title="Sửa"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleToggleStatus(ds.id)}
+                          className={`p-1 hover:bg-surface-container-high rounded transition-colors cursor-pointer ${
+                            ds.status === "ACTIVE"
+                              ? "text-error hover:bg-error-container/20"
+                              : "text-tertiary-fixed-dim hover:bg-tertiary-fixed-dim/20"
+                          }`}
+                          title={ds.status === "ACTIVE" ? "Vô hiệu hóa" : "Kích hoạt"}
+                        >
+                          <Power className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="p-8 text-center text-on-surface-variant font-medium">
+                    Không tìm thấy chính sách miễn giảm nào khớp điều kiện lọc.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Form Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setIsModalOpen(false)}
+          />
+          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl w-full max-w-md p-6 z-10">
+            <div className="flex justify-between items-center pb-3 border-b border-outline-variant mb-4">
+              <h3 className="text-lg font-bold text-on-surface">
+                {modalMode === "CREATE" ? "Tạo Miễn Giảm Mới" : "Chỉnh Sửa Miễn Giảm"}
+              </h3>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-1 hover:bg-surface-container-high rounded-full text-on-surface-variant cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                  Nhóm đối tượng khách hàng
+                </label>
+                <select
+                  value={passengerType}
+                  onChange={(e) => setPassengerType(e.target.value as any)}
+                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
+                  disabled={modalMode === "EDIT"}
+                >
+                  <option value="STUDENT">Học sinh / Sinh viên (STUDENT)</option>
+                  <option value="SENIOR">Người cao tuổi (SENIOR)</option>
+                  <option value="PRIORITY">Đối tượng ưu tiên miễn giảm (PRIORITY)</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                    Hình thức giảm giá
+                  </label>
+                  <select
+                    value={discountType}
+                    onChange={(e) => setDiscountType(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
+                  >
+                    <option value="PERCENT">Phần trăm (%)</option>
+                    <option value="FIXED">Tiền mặt cố định (₫)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                    Mức giảm giá ({discountType === "PERCENT" ? "%" : "₫"})
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={discountType === "PERCENT" ? 100 : undefined}
+                    required
+                    value={discountValue}
+                    onChange={(e) => setDiscountValue(parseInt(e.target.value))}
+                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                    Ngày có hiệu lực
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={effectiveFrom}
+                    onChange={(e) => setEffectiveFrom(e.target.value)}
+                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                    Ngày hết hiệu lực
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={effectiveTo}
+                    onChange={(e) => setEffectiveTo(e.target.value)}
+                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 border border-outline-variant rounded text-on-surface-variant hover:bg-surface-container-high transition-colors text-xs font-semibold uppercase cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-secondary text-on-secondary rounded hover:bg-secondary-container transition-colors text-xs font-semibold uppercase cursor-pointer"
+                >
+                  {modalMode === "CREATE" ? "Tạo chính sách" : "Lưu thay đổi"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

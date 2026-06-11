@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Train,
   Plus,
@@ -9,8 +9,10 @@ import {
   Trash2,
   X,
   Navigation,
-  Hash
+  Hash,
+  AlertTriangle
 } from "lucide-react";
+import { fetchApi } from "@/lib/api";
 
 interface Station {
   id: string;
@@ -24,54 +26,14 @@ interface Station {
 }
 
 export default function StationsPage() {
-  const [stations, setStations] = useState<Station[]>([
-    {
-      id: "st-1",
-      routeId: "rt-1",
-      routeCode: "R-M1",
-      code: "ST-M1-01",
-      name: "Ga Cát Linh",
-      kmMarker: 0.0,
-      stationOrder: 1,
-      createdAt: "2026-01-10 10:05"
-    },
-    {
-      id: "st-2",
-      routeId: "rt-1",
-      routeCode: "R-M1",
-      code: "ST-M1-02",
-      name: "Ga La Thành",
-      kmMarker: 1.2,
-      stationOrder: 2,
-      createdAt: "2026-01-10 10:08"
-    },
-    {
-      id: "st-3",
-      routeId: "rt-1",
-      routeCode: "R-M1",
-      code: "ST-M1-03",
-      name: "Ga Thái Hà",
-      kmMarker: 2.1,
-      stationOrder: 3,
-      createdAt: "2026-01-10 10:10"
-    },
-    {
-      id: "st-4",
-      routeId: "rt-1",
-      routeCode: "R-M1",
-      code: "ST-M1-04",
-      name: "Ga Láng",
-      kmMarker: 3.1,
-      stationOrder: 4,
-      createdAt: "2026-01-10 10:12"
-    }
-  ]);
+  const [stations, setStations] = useState<Station[]>([]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [routeFilter, setRouteFilter] = useState("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"CREATE" | "EDIT">("CREATE");
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Form State
   const [code, setCode] = useState("");
@@ -80,11 +42,49 @@ export default function StationsPage() {
   const [kmMarker, setKmMarker] = useState(0.0);
   const [stationOrder, setStationOrder] = useState(1);
 
-  const routesList = [
-    { code: "R-M1", name: "Tuyến Cát Linh - Hà Đông (R-M1)" },
-    { code: "R-B01", name: "Tuyến xe buýt 01 (R-B01)" },
-    { code: "R-B02", name: "Tuyến xe buýt 02 (R-B02)" }
-  ];
+  const [routesList, setRoutesList] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [stationsData, routesData] = await Promise.all([
+          fetchApi("/api/stations"),
+          fetchApi("/api/routes")
+        ]);
+        
+        let rMap: Record<string, string> = {};
+        if (Array.isArray(routesData)) {
+          setRoutesList(routesData.map((r: any) => ({
+            id: r.id,
+            code: r.code,
+            name: `${r.name} (${r.code})`
+          })));
+          routesData.forEach((r: any) => {
+            rMap[r.id] = r.code;
+          });
+        } else {
+          rMap = { "rt-1": "R-M1", "rt-2": "R-B01", "rt-3": "R-B02" };
+        }
+        
+        if (Array.isArray(stationsData)) {
+          setStations(stationsData.map((s: any) => ({
+            id: s.id,
+            routeId: s.routeId,
+            routeCode: s.routeCode || rMap[s.routeId] || "R-M1",
+            code: s.code,
+            name: s.name,
+            kmMarker: s.kmMarker || 0,
+            stationOrder: s.stationOrder || 1,
+            createdAt: s.createdAt ? new Date(s.createdAt).toISOString().replace("T", " ").substring(0, 16) : ""
+          })));
+        }
+      } catch (err: any) {
+        console.warn("FMC Stations/Routes API is offline. Running in mock fallback mode. Error:", err.message);
+        setIsOffline(true);
+      }
+    }
+    loadData();
+  }, []);
 
   const handleOpenCreateModal = () => {
     setModalMode("CREATE");
@@ -107,34 +107,94 @@ export default function StationsPage() {
     setIsModalOpen(true);
   };
 
-  const handleDeleteStation = (id: string) => {
+  const handleDeleteStation = async (id: string) => {
     if (confirm("Bạn có chắc chắn muốn xóa nhà ga này khỏi hệ thống?")) {
       setStations(stations.filter((st) => st.id !== id));
+      try {
+        await fetchApi(`/api/stations/${id}`, { method: "DELETE" });
+      } catch (err: any) {
+        console.warn("DELETE /api/stations failed, using local state. Error:", err.message);
+        setIsOffline(true);
+      }
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const currentRoute = routesList.find((r) => r.code === routeCode);
+    const rId = currentRoute ? currentRoute.id : (routeCode === "R-M1" ? "rt-1" : routeCode === "R-B01" ? "rt-2" : "rt-3");
+    
     if (modalMode === "CREATE") {
-      const newStation: Station = {
-        id: `st-${Date.now()}`,
-        code,
-        name,
-        routeId: routeCode === "R-M1" ? "rt-1" : routeCode === "R-B01" ? "rt-2" : "rt-3",
-        routeCode,
-        kmMarker,
-        stationOrder,
-        createdAt: new Date().toISOString().replace("T", " ").substring(0, 16)
-      };
-      setStations([...stations, newStation]);
+      try {
+        const newStation = await fetchApi("/api/stations", {
+          method: "POST",
+          body: JSON.stringify({
+            code,
+            name,
+            routeId: rId,
+            kmMarker,
+            stationOrder
+          })
+        });
+        setStations([...stations, {
+          id: newStation.id,
+          code: newStation.code,
+          name: newStation.name,
+          routeId: newStation.routeId,
+          routeCode: routeCode,
+          kmMarker: newStation.kmMarker || kmMarker,
+          stationOrder: newStation.stationOrder || stationOrder,
+          createdAt: newStation.createdAt ? new Date(newStation.createdAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16)
+        }]);
+      } catch (err: any) {
+        console.warn("POST /api/stations failed, falling back to local creation. Error:", err.message);
+        setIsOffline(true);
+        const fallbackStation: Station = {
+          id: `st-${Date.now()}`,
+          code,
+          name,
+          routeId: rId,
+          routeCode,
+          kmMarker,
+          stationOrder,
+          createdAt: new Date().toISOString().replace("T", " ").substring(0, 16)
+        };
+        setStations([...stations, fallbackStation]);
+      }
     } else if (modalMode === "EDIT" && selectedStation) {
-      setStations(
-        stations.map((st) =>
-          st.id === selectedStation.id
-            ? { ...st, code, name, routeCode, kmMarker, stationOrder, routeId: routeCode === "R-M1" ? "rt-1" : routeCode === "R-B01" ? "rt-2" : "rt-3" }
-            : st
-        )
-      );
+      try {
+        const updatedStation = await fetchApi(`/api/stations/${selectedStation.id}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            name,
+            kmMarker
+          })
+        });
+        setStations(
+          stations.map((st) =>
+            st.id === selectedStation.id
+              ? {
+                  ...st,
+                  name: updatedStation.name || name,
+                  kmMarker: updatedStation.kmMarker !== undefined ? updatedStation.kmMarker : kmMarker,
+                  stationOrder,
+                  routeCode,
+                  routeId: rId
+                }
+              : st
+          )
+        );
+      } catch (err: any) {
+        console.warn("PUT /api/stations failed, falling back to local update. Error:", err.message);
+        setIsOffline(true);
+        setStations(
+          stations.map((st) =>
+            st.id === selectedStation.id
+              ? { ...st, name, routeCode, kmMarker, stationOrder, routeId: rId }
+              : st
+          )
+        );
+      }
     }
     setIsModalOpen(false);
   };
@@ -149,6 +209,13 @@ export default function StationsPage() {
 
   return (
     <div className="space-y-6">
+      {isOffline && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
+          </span>
+        </div>
+      )}
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   AlertTriangle,
   Search,
@@ -13,6 +13,7 @@ import {
   X,
   MessageSquare
 } from "lucide-react";
+import { fetchApi } from "@/lib/api";
 
 interface AnomalyItem {
   id: string;
@@ -28,56 +29,45 @@ interface AnomalyItem {
 }
 
 export default function AnomaliesPage() {
-  const [anomalies, setAnomalies] = useState<AnomalyItem[]>([
-    {
-      id: "8821a3b1-4e8c-42a1-b883-92c4f550da12",
-      tripId: "tx-7719-f538-4e1b",
-      anomalyType: "DEVICE_OFFLINE",
-      severity: "CRITICAL",
-      description: "Thiết bị cổng kiểm soát GATE-IN-MS01-A2 mất kết nối với hệ thống FMC hơn 15 phút.",
-      isResolved: false,
-      detectedAt: "2026-06-11T11:24:05"
-    },
-    {
-      id: "7742b8e3-12d4-4b5c-a29d-cc83a1b02931",
-      tripId: "tx-3382-b883-92f4",
-      anomalyType: "INVALID_TAP_SEQUENCE",
-      severity: "WARNING",
-      description: "Phát hiện quẹt thẻ liên tục (Tap in 2 lần liên tiếp không có quẹt ra) tại Ga La Thành.",
-      isResolved: false,
-      detectedAt: "2026-06-11T10:45:12"
-    },
-    {
-      id: "1240c9d8-883b-47de-a590-b183ab924012",
-      tripId: "tx-2204-a590-1c9d",
-      anomalyType: "CARD_BALANCE_MISMATCH",
-      severity: "WARNING",
-      description: "Số dư thực tế trên thẻ vật lý thấp hơn số dư ghi nhận trên ví điện tử FMC (-50,000 ₫).",
-      isResolved: false,
-      detectedAt: "2026-06-11T09:30:00"
-    },
-    {
-      id: "0931d550-9921-4f33-8c4d-a129ef38b821",
-      tripId: "tx-1204-e598-bb83",
-      anomalyType: "FRAUD_SUSPECTED",
-      severity: "CRITICAL",
-      description: "Thẻ nằm trong Danh sách đen (Lý do báo mất) cố gắng quẹt thẻ đi tại Ga Yên Nghĩa.",
-      isResolved: true,
-      detectedAt: "2026-06-10T16:15:33",
-      notes: "Đã giữ thẻ vật lý tại quầy chăm sóc khách hàng Ga Yên Nghĩa.",
-      resolvedAt: "2026-06-10T16:45:00",
-      resolvedBy: "Nguyễn Văn A (System)"
-    }
-  ]);
+  const [anomalies, setAnomalies] = useState<AnomalyItem[]>([]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [severityFilter, setSeverityFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [isOffline, setIsOffline] = useState(false);
   
   // Resolve Action Modal State
   const [selectedAnomaly, setSelectedAnomaly] = useState<AnomalyItem | null>(null);
   const [resolutionNote, setResolutionNote] = useState("");
   const [actionType, setActionType] = useState<"RESOLVE" | "IGNORE">("RESOLVE");
+
+  async function loadAnomalies() {
+    try {
+      const data = await fetchApi("/api/anomalies", { params: { size: 100 } });
+      const list = data.content || data || [];
+      if (Array.isArray(list)) {
+        setAnomalies(list.map((item) => ({
+          id: item.id,
+          tripId: item.tripId || "",
+          anomalyType: item.anomalyType,
+          severity: item.severity === "ERROR" ? "CRITICAL" : item.severity,
+          description: item.description,
+          isResolved: !!item.isResolved,
+          detectedAt: item.detectedAt ? new Date(item.detectedAt).toISOString().replace("T", " ").substring(0, 19) : "",
+          resolvedAt: item.resolvedAt ? new Date(item.resolvedAt).toISOString().replace("T", " ").substring(0, 19) : undefined,
+          notes: item.notes || "",
+          resolvedBy: item.resolvedBy || "Hệ thống"
+        })));
+      }
+    } catch (err: any) {
+      console.warn("FMC Anomalies API is offline. Running in mock fallback mode. Error:", err.message);
+      setIsOffline(true);
+    }
+  }
+
+  useEffect(() => {
+    loadAnomalies();
+  }, []);
 
   const handleOpenActionModal = (anomaly: AnomalyItem, type: "RESOLVE" | "IGNORE") => {
     setSelectedAnomaly(anomaly);
@@ -85,23 +75,33 @@ export default function AnomaliesPage() {
     setResolutionNote("");
   };
 
-  const handleResolveAnomaly = (e: React.FormEvent) => {
+  const handleResolveAnomaly = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedAnomaly) return;
 
-    setAnomalies(
-      anomalies.map((alt) =>
-        alt.id === selectedAnomaly.id
-          ? {
-              ...alt,
-              isResolved: actionType === "RESOLVE",
-              notes: resolutionNote,
-              resolvedAt: new Date().toISOString(),
-              resolvedBy: "Trần Văn B (Admin)"
-            }
-          : alt
-      )
-    );
+    const resolvedTime = new Date().toISOString();
+    const updater = (alt: AnomalyItem) =>
+      alt.id === selectedAnomaly.id
+        ? {
+            ...alt,
+            isResolved: actionType === "RESOLVE",
+            notes: resolutionNote,
+            resolvedAt: resolvedTime.replace("T", " ").substring(0, 19),
+            resolvedBy: "Trần Văn B (Admin)"
+          }
+        : alt;
+
+    try {
+      await fetchApi(`/api/anomalies/${selectedAnomaly.id}/resolve`, {
+        method: "PATCH",
+        body: JSON.stringify({ notes: resolutionNote })
+      });
+      setAnomalies(prev => prev.map(updater));
+    } catch (err: any) {
+      console.warn("PATCH resolve anomaly failed. Falling back to local state. Error:", err.message);
+      setIsOffline(true);
+      setAnomalies(prev => prev.map(updater));
+    }
 
     setSelectedAnomaly(null);
   };
@@ -121,6 +121,14 @@ export default function AnomaliesPage() {
 
   return (
     <div className="space-y-6">
+      {isOffline && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>

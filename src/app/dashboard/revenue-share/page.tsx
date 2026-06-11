@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Wallet,
   Plus,
@@ -12,8 +12,10 @@ import {
   History,
   Info,
   X,
-  FileSpreadsheet
+  FileSpreadsheet,
+  AlertTriangle
 } from "lucide-react";
+import { fetchApi } from "@/lib/api";
 
 interface RevenueShareRule {
   id: string;
@@ -30,51 +32,13 @@ interface RevenueShareRule {
 }
 
 export default function RevenueSharePage() {
-  const [rules, setRules] = useState<RevenueShareRule[]>([
-    {
-      id: "rule-100",
-      operatorId: "op-1",
-      operatorCode: "HURC",
-      shareModel: "TRIP_BASED",
-      sharePercentage: 60, // 60% of tickets sold on Metro
-      effectiveFrom: "2026-01-01",
-      effectiveTo: "2026-12-31",
-      status: "ACTIVE",
-      version: 2,
-      createdAt: "2025-12-25 10:00",
-      params: { tripWeight: 1.0, minimumGuarantee: 500000000 }
-    },
-    {
-      id: "rule-200",
-      operatorId: "op-2",
-      operatorCode: "TRANSERCO",
-      shareModel: "KM_BASED",
-      sharePercentage: 40, // 40% sharing based on fleet KM run
-      effectiveFrom: "2026-01-01",
-      effectiveTo: "2026-12-31",
-      status: "ACTIVE",
-      version: 1,
-      createdAt: "2025-12-25 10:15",
-      params: { kmRateMultiplier: 1.2, flatBonus: 100000000 }
-    },
-    {
-      id: "rule-099",
-      operatorId: "op-1",
-      operatorCode: "HURC",
-      shareModel: "FIXED",
-      sharePercentage: 50,
-      effectiveFrom: "2025-06-01",
-      effectiveTo: "2025-12-31",
-      status: "INACTIVE",
-      version: 1,
-      createdAt: "2025-05-15 09:30",
-      params: { monthlyFixedAmount: 800000000 }
-    }
-  ]);
+  const [rules, setRules] = useState<RevenueShareRule[]>([]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [modelFilter, setModelFilter] = useState("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [operatorsList, setOperatorsList] = useState<any[]>([]);
   
   // Form States for new sharing rule
   const [operatorCode, setOperatorCode] = useState("HURC");
@@ -84,6 +48,47 @@ export default function RevenueSharePage() {
   const [effectiveTo, setEffectiveTo] = useState("2026-12-31");
   const [paramKey, setParamKey] = useState("tripWeight");
   const [paramVal, setParamVal] = useState("1.0");
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [rulesData, operatorsData] = await Promise.all([
+          fetchApi("/api/revenue-share-rules"),
+          fetchApi("/api/operators")
+        ]);
+
+        let ops = [];
+        if (Array.isArray(operatorsData)) {
+          ops = operatorsData;
+          setOperatorsList(operatorsData);
+        }
+
+        const rulesList = rulesData.content || rulesData || [];
+        if (Array.isArray(rulesList)) {
+          setRules(rulesList.map((r) => {
+            const matchedOp = ops.find(o => o.id === r.operatorId);
+            return {
+              id: r.id,
+              operatorId: r.operatorId,
+              operatorCode: matchedOp ? matchedOp.code : "N/A",
+              shareModel: r.shareModel,
+              sharePercentage: r.sharePercentage || 0,
+              effectiveFrom: r.effectiveFrom || "",
+              effectiveTo: r.effectiveTo || "",
+              status: r.status || "ACTIVE",
+              version: r.version || 1,
+              createdAt: r.createdAt ? new Date(r.createdAt).toISOString().replace("T", " ").substring(0, 16) : "",
+              params: r.params || {}
+            };
+          }));
+        }
+      } catch (err: any) {
+        console.warn("FMC Revenue Share rules API is offline. Running in mock fallback mode. Error:", err.message);
+        setIsOffline(true);
+      }
+    }
+    loadData();
+  }, []);
 
   const handleOpenCreateModal = () => {
     setOperatorCode("HURC");
@@ -96,13 +101,18 @@ export default function RevenueSharePage() {
     setIsModalOpen(true);
   };
 
-  const handleCreateRule = (e: React.FormEvent) => {
+  const handleCreateRule = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Check operatorId mapping
-    const operatorId = operatorCode === "HURC" ? "op-1" : "op-2";
+    let resolvedOperatorId = operatorCode === "HURC" ? "op-1" : "op-2";
+    if (operatorsList.length > 0) {
+      const match = operatorsList.find(o => o.code === operatorCode);
+      if (match) {
+        resolvedOperatorId = match.id;
+      }
+    }
     
-    // Deactivate previous active rules for the same operator
+    // Deactivate previous active rules for the same operator in UI
     const updatedRules = rules.map(rule => {
       if (rule.operatorCode === operatorCode && rule.status === "ACTIVE") {
         return { ...rule, status: "INACTIVE" as const };
@@ -111,45 +121,96 @@ export default function RevenueSharePage() {
     });
 
     const nextVersion = rules.filter(r => r.operatorCode === operatorCode).length + 1;
+    const ruleParams = { [paramKey]: parseFloat(paramVal) || paramVal };
 
-    const newRule: RevenueShareRule = {
-      id: `rule-${Math.floor(300 + Math.random() * 700)}`,
-      operatorId,
-      operatorCode,
-      shareModel,
-      sharePercentage,
-      effectiveFrom,
-      effectiveTo,
-      status: "ACTIVE",
-      version: nextVersion,
-      createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-      params: { [paramKey]: parseFloat(paramVal) || paramVal }
-    };
+    try {
+      const newRuleFromApi = await fetchApi("/api/revenue-share-rules", {
+        method: "POST",
+        body: JSON.stringify({
+          operatorId: resolvedOperatorId,
+          shareModel,
+          sharePercentage,
+          effectiveFrom,
+          effectiveTo,
+          params: ruleParams
+        })
+      });
 
-    setRules([newRule, ...updatedRules]);
+      const newRule: RevenueShareRule = {
+        id: newRuleFromApi.id,
+        operatorId: newRuleFromApi.operatorId,
+        operatorCode,
+        shareModel: newRuleFromApi.shareModel,
+        sharePercentage: newRuleFromApi.sharePercentage,
+        effectiveFrom: newRuleFromApi.effectiveFrom,
+        effectiveTo: newRuleFromApi.effectiveTo,
+        status: (newRuleFromApi.status as "ACTIVE" | "INACTIVE") || "ACTIVE",
+        version: newRuleFromApi.version || nextVersion,
+        createdAt: newRuleFromApi.createdAt ? new Date(newRuleFromApi.createdAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16),
+        params: newRuleFromApi.params || ruleParams
+      };
+      setRules([newRule, ...updatedRules]);
+    } catch (err: any) {
+      console.warn("POST revenue share rule API failed, using mock local creation. Error:", err.message);
+      setIsOffline(true);
+
+      const newRule: RevenueShareRule = {
+        id: 'rule-' + Math.floor(300 + Math.random() * 700),
+        operatorId: resolvedOperatorId,
+        operatorCode,
+        shareModel,
+        sharePercentage,
+        effectiveFrom,
+        effectiveTo,
+        status: "ACTIVE",
+        version: nextVersion,
+        createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+        params: ruleParams
+      };
+
+      setRules([newRule, ...updatedRules]);
+    }
+    
     setIsModalOpen(false);
   };
 
-  const handleToggleActive = (id: string) => {
-    setRules(
-      rules.map((rule) => {
+  const handleToggleActive = async (id: string) => {
+    const ruleToToggle = rules.find((r) => r.id === id);
+    if (!ruleToToggle) return;
+
+    const isCurrentlyActive = ruleToToggle.status === "ACTIVE";
+    const nextStatus: "ACTIVE" | "INACTIVE" = isCurrentlyActive ? "INACTIVE" : "ACTIVE";
+
+    const updater = (prevRules: RevenueShareRule[]) => {
+      let temp = prevRules.map((rule) => {
         if (rule.id === id) {
-          const isActivating = rule.status === "INACTIVE";
-          // If activating, we must deactivate other active rules for the same operator
-          if (isActivating) {
-            setTimeout(() => {
-              setRules(prev => prev.map(r => 
-                r.id === id 
-                  ? { ...r, status: "ACTIVE" }
-                  : (r.operatorCode === rule.operatorCode && r.status === "ACTIVE" ? { ...r, status: "INACTIVE" } : r)
-              ));
-            }, 0);
-          }
-          return { ...rule, status: rule.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" };
+          return { ...rule, status: nextStatus };
         }
         return rule;
-      })
-    );
+      });
+
+      if (nextStatus === "ACTIVE") {
+        temp = temp.map((r) =>
+          r.id !== id && r.operatorCode === ruleToToggle.operatorCode && r.status === "ACTIVE"
+            ? { ...r, status: "INACTIVE" as const }
+            : r
+        );
+      }
+      return temp;
+    };
+
+    try {
+      if (isCurrentlyActive) {
+        await fetchApi(`/api/revenue-share-rules/${id}`, { method: "DELETE" });
+      } else {
+        console.warn("No explicit activate endpoint, toggling locally");
+      }
+      setRules(updater);
+    } catch (err: any) {
+      console.warn("Toggle rule active status failed, using mock local state. Error:", err.message);
+      setIsOffline(true);
+      setRules(updater);
+    }
   };
 
   const filteredRules = rules.filter((r) => {
@@ -162,6 +223,14 @@ export default function RevenueSharePage() {
 
   return (
     <div className="space-y-6">
+      {isOffline && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>

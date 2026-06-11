@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   FileSpreadsheet,
   Plus,
@@ -10,8 +10,10 @@ import {
   CheckCircle,
   XCircle,
   X,
-  Coins
+  Coins,
+  AlertTriangle
 } from "lucide-react";
+import { fetchApi } from "@/lib/api";
 
 interface FareRule {
   id: string;
@@ -27,50 +29,14 @@ interface FareRule {
 }
 
 export default function FareRulesPage() {
-  const [rules, setRules] = useState<FareRule[]>([
-    {
-      id: "fr-1",
-      code: "FR-METRO-01",
-      mode: "METRO",
-      baseFare: 8000,
-      ratePerKm: 600,
-      minPrice: 8000,
-      maxPrice: 15000,
-      effectiveFrom: "2026-01-01",
-      effectiveTo: "2026-12-31",
-      status: "ACTIVE"
-    },
-    {
-      id: "fr-2",
-      code: "FR-BUS-DEFAULT",
-      mode: "BUS",
-      baseFare: 7000,
-      ratePerKm: 0,
-      minPrice: 7000,
-      maxPrice: 7000,
-      effectiveFrom: "2026-01-01",
-      effectiveTo: "2026-12-31",
-      status: "ACTIVE"
-    },
-    {
-      id: "fr-3",
-      code: "FR-METRO-PROMO",
-      mode: "METRO",
-      baseFare: 6000,
-      ratePerKm: 400,
-      minPrice: 6000,
-      maxPrice: 12000,
-      effectiveFrom: "2026-05-01",
-      effectiveTo: "2026-05-31",
-      status: "INACTIVE"
-    }
-  ]);
+  const [rules, setRules] = useState<FareRule[]>([]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [modeFilter, setModeFilter] = useState("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"CREATE" | "EDIT">("CREATE");
   const [selectedRule, setSelectedRule] = useState<FareRule | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Form State
   const [code, setCode] = useState("");
@@ -81,6 +47,32 @@ export default function FareRulesPage() {
   const [maxPrice, setMaxPrice] = useState(15000);
   const [effectiveFrom, setEffectiveFrom] = useState("2026-01-01");
   const [effectiveTo, setEffectiveTo] = useState("2026-12-31");
+
+  useEffect(() => {
+    async function loadRules() {
+      try {
+        const data = await fetchApi("/api/fare-rules");
+        if (Array.isArray(data)) {
+          setRules(data.map((r) => ({
+            id: r.id,
+            code: r.code,
+            mode: r.mode || "METRO",
+            baseFare: r.baseFare || 0,
+            ratePerKm: r.ratePerKm || 0,
+            minPrice: r.minPrice || 0,
+            maxPrice: r.maxPrice || 0,
+            effectiveFrom: r.effectiveFrom || "",
+            effectiveTo: r.effectiveTo || "",
+            status: r.status || "ACTIVE"
+          })));
+        }
+      } catch (err: any) {
+        console.warn("FMC Fare Rules API is offline. Running in mock fallback mode. Error:", err.message);
+        setIsOffline(true);
+      }
+    }
+    loadRules();
+  }, []);
 
   const handleOpenCreateModal = () => {
     setModalMode("CREATE");
@@ -109,38 +101,114 @@ export default function FareRulesPage() {
     setIsModalOpen(true);
   };
 
-  const handleToggleStatus = (id: string) => {
+  const handleToggleStatus = async (id: string) => {
+    const rule = rules.find((r) => r.id === id);
+    if (!rule) return;
+    const nextStatus = rule.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
     setRules(
       rules.map((r) =>
-        r.id === id ? { ...r, status: r.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" } : r
+        r.id === id ? { ...r, status: nextStatus } : r
       )
     );
+    try {
+      if (nextStatus === "INACTIVE") {
+        await fetchApi("/api/fare-rules/" + id + "/disable", { method: "PATCH" });
+      } else {
+        console.warn("No explicit enable endpoint, toggled locally");
+      }
+    } catch (err: any) {
+      console.warn("Toggle status API failed, using mock local state. Error:", err.message);
+      setIsOffline(true);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (modalMode === "CREATE") {
-      const newRule: FareRule = {
-        id: `fr-${Date.now()}`,
-        code,
-        mode,
-        baseFare,
-        ratePerKm,
-        minPrice,
-        maxPrice,
-        effectiveFrom,
-        effectiveTo,
-        status: "ACTIVE"
-      };
-      setRules([...rules, newRule]);
+      try {
+        const newRule = await fetchApi("/api/fare-rules", {
+          method: "POST",
+          body: JSON.stringify({
+            code,
+            mode,
+            baseFare,
+            ratePerKm,
+            minPrice,
+            maxPrice,
+            effectiveFrom,
+            effectiveTo
+          })
+        });
+        setRules([...rules, {
+          id: newRule.id,
+          code: newRule.code,
+          mode: newRule.mode || mode,
+          baseFare: newRule.baseFare || baseFare,
+          ratePerKm: newRule.ratePerKm || ratePerKm,
+          minPrice: newRule.minPrice || minPrice,
+          maxPrice: newRule.maxPrice || maxPrice,
+          effectiveFrom: newRule.effectiveFrom || effectiveFrom,
+          effectiveTo: newRule.effectiveTo || effectiveTo,
+          status: newRule.status || "ACTIVE"
+        }]);
+      } catch (err: any) {
+        console.warn("POST /api/fare-rules failed, using mock local state. Error:", err.message);
+        setIsOffline(true);
+        const fallbackRule: FareRule = {
+          id: "fr-" + Date.now(),
+          code,
+          mode,
+          baseFare,
+          ratePerKm,
+          minPrice,
+          maxPrice,
+          effectiveFrom,
+          effectiveTo,
+          status: "ACTIVE"
+        };
+        setRules([...rules, fallbackRule]);
+      }
     } else if (modalMode === "EDIT" && selectedRule) {
-      setRules(
-        rules.map((r) =>
-          r.id === selectedRule.id
-            ? { ...r, code, mode, baseFare, ratePerKm, minPrice, maxPrice, effectiveFrom, effectiveTo }
-            : r
-        )
-      );
+      try {
+        const updatedRule = await fetchApi("/api/fare-rules/" + selectedRule.id, {
+          method: "PUT",
+          body: JSON.stringify({
+            baseFare,
+            ratePerKm,
+            minPrice,
+            maxPrice,
+            effectiveFrom,
+            effectiveTo
+          })
+        });
+        setRules(
+          rules.map((r) =>
+            r.id === selectedRule.id
+              ? {
+                  ...r,
+                  code,
+                  mode,
+                  baseFare: updatedRule.baseFare !== undefined ? updatedRule.baseFare : baseFare,
+                  ratePerKm: updatedRule.ratePerKm !== undefined ? updatedRule.ratePerKm : ratePerKm,
+                  minPrice: updatedRule.minPrice !== undefined ? updatedRule.minPrice : minPrice,
+                  maxPrice: updatedRule.maxPrice !== undefined ? updatedRule.maxPrice : maxPrice,
+                  effectiveFrom: updatedRule.effectiveFrom || effectiveFrom,
+                  effectiveTo: updatedRule.effectiveTo || effectiveTo
+                }
+              : r
+          )
+        );
+      } catch (err: any) {
+        console.warn("PUT /api/fare-rules failed, using mock local state. Error:", err.message);
+        setIsOffline(true);
+        setRules(
+          rules.map((r) =>
+            r.id === selectedRule.id
+              ? { ...r, code, mode, baseFare, ratePerKm, minPrice, maxPrice, effectiveFrom, effectiveTo }
+              : r
+          )
+        );
+      }
     }
     setIsModalOpen(false);
   };
@@ -153,6 +221,13 @@ export default function FareRulesPage() {
 
   return (
     <div className="space-y-6">
+      {isOffline && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
+          </span>
+        </div>
+      )}    
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>

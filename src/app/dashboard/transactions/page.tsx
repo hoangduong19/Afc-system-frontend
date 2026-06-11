@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Receipt,
   Search,
@@ -16,6 +16,7 @@ import {
   CreditCard,
   Building2
 } from "lucide-react";
+import { fetchApi } from "@/lib/api";
 
 interface TransactionItem {
   transactionId: string;
@@ -39,85 +40,48 @@ interface TransactionItem {
 }
 
 export default function TransactionsPage() {
-  const [transactions, setTransactions] = useState<TransactionItem[]>([
-    {
-      transactionId: "tx-7719-f538-4e1b",
-      cardUid: "04:D2:E8:A1:B9:5C:80",
-      ticketId: "tk-8893-a1",
-      operatorCode: "HURC",
-      lineCode: "L2A (Cát Linh - Yên Nghĩa)",
-      tapInStationCode: "MS01 (Cát Linh)",
-      tapInAt: "2026-06-11 08:32:15",
-      tapInDeviceId: "GATE-IN-MS01-A2",
-      tapOutStationCode: "MS05 (Vành Đai 3)",
-      tapOutAt: "2026-06-11 08:52:45",
-      tapOutDeviceId: "GATE-OUT-MS05-B1",
-      distanceKm: 8.6,
-      fareAmount: 13000,
-      mode: "METRO",
-      paymentMethod: "TICKET",
-      ticketType: "SINGLE_TRIP",
-      tripStatus: "COMPLETED",
-      debtAmount: 0
-    },
-    {
-      transactionId: "tx-2204-a590-1c9d",
-      cardUid: "08:1F:B3:94:C2:7D:06",
-      operatorCode: "TRANSERCO",
-      lineCode: "BUS-32 (Giáp Bát - Nhổn)",
-      tapInStationCode: "BS12 (Hào Nam)",
-      tapInAt: "2026-06-11 09:12:00",
-      tapInDeviceId: "BUS-32-READER-03",
-      tapOutStationCode: "BS18 (Cầu Giấy)",
-      tapOutAt: "2026-06-11 09:35:10",
-      tapOutDeviceId: "BUS-32-READER-04",
-      distanceKm: 5.2,
-      fareAmount: 7000,
-      mode: "BUS",
-      paymentMethod: "WALLET",
-      tripStatus: "COMPLETED",
-      debtAmount: 0
-    },
-    {
-      transactionId: "tx-3382-b883-92f4",
-      cardUid: "09:7A:B4:C2:58:E9:10",
-      operatorCode: "HURC",
-      lineCode: "L2A (Cát Linh - Yên Nghĩa)",
-      tapInStationCode: "MS02 (La Thành)",
-      tapInAt: "2026-06-11 09:45:00",
-      tapInDeviceId: "GATE-IN-MS02-A1",
-      distanceKm: 0.0,
-      fareAmount: 0,
-      mode: "METRO",
-      paymentMethod: "PREPAID",
-      tripStatus: "DEBT",
-      debtAmount: 15000 // Incomplete journey default debt
-    },
-    {
-      transactionId: "tx-1204-e598-bb83",
-      cardUid: "04:D2:E8:A1:B9:5C:80",
-      ticketId: "tk-1204-b2",
-      operatorCode: "TRANSERCO",
-      lineCode: "BUS-02 (Bác Cổ - Yên Nghĩa)",
-      tapInStationCode: "BS05 (Trần Hưng Đạo)",
-      tapInAt: "2026-06-11 10:05:30",
-      tapInDeviceId: "BUS-02-READER-01",
-      tapOutStationCode: "BS22 (Hà Đông)",
-      tapOutAt: "2026-06-11 10:48:15",
-      distanceKm: 12.4,
-      fareAmount: 0, // Monthly pass 0 fare
-      mode: "BUS",
-      paymentMethod: "TICKET",
-      ticketType: "MONTHLY_PASS",
-      tripStatus: "COMPLETED",
-      debtAmount: 0
-    }
-  ]);
+  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [operatorFilter, setOperatorFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedTx, setSelectedTx] = useState<TransactionItem | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
+
+  useEffect(() => {
+    async function loadTransactions() {
+      try {
+        const data = await fetchApi("/api/transactions");
+        const list = data.content || data || [];
+        if (Array.isArray(list)) {
+          setTransactions(list.map((t: any) => ({
+            transactionId: t.id,
+            cardUid: t.cardUid || "Mã thẻ ẩn",
+            ticketId: t.externalTransactionId,
+            operatorCode: t.operatorCode || "HURC",
+            lineCode: t.operatorCode === "HURC" ? "L2A (Cát Linh - Yên Nghĩa)" : "BUS LINE",
+            tapInStationCode: t.tapInStationCode || "MS01",
+            tapInAt: t.tapInAt ? new Date(t.tapInAt).toISOString().replace("T", " ").substring(0, 19) : "",
+            tapInDeviceId: t.tapInDeviceId || "GATE-IN-01",
+            tapOutStationCode: t.tapOutStationCode || undefined,
+            tapOutAt: t.tapOutAt ? new Date(t.tapOutAt).toISOString().replace("T", " ").substring(0, 19) : undefined,
+            tapOutDeviceId: t.tapOutDeviceId || undefined,
+            distanceKm: t.distanceKm || 0,
+            fareAmount: t.fareAmount || 0,
+            mode: t.operatorCode === "HURC" ? "METRO" : "BUS",
+            paymentMethod: t.paymentMethod || "WALLET",
+            ticketType: t.ticketType || undefined,
+            tripStatus: t.status || "COMPLETED",
+            debtAmount: t.debtAmount || 0
+          })));
+        }
+      } catch (err: any) {
+        console.warn("FMC Transactions API is offline. Running in mock fallback mode. Error:", err.message);
+        setIsOffline(true);
+      }
+    }
+    loadTransactions();
+  }, []);
 
   const filteredTransactions = transactions.filter((tx) => {
     const matchesSearch =
@@ -132,6 +96,13 @@ export default function TransactionsPage() {
 
   return (
     <div className="space-y-6">
+      {isOffline && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
+          </span>
+        </div>
+      )}    
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>

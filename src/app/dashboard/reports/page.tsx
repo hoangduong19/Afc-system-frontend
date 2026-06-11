@@ -27,35 +27,7 @@ interface ExportedReport {
 }
 
 export default function ReportsPage() {
-  const [reports, setReports] = useState<ExportedReport[]>([
-    {
-      id: "rep-101",
-      fileName: "bao-cao-doanh-thu-lien-thong-thang-05-2026.xlsx",
-      category: "REVENUE",
-      format: "EXCEL",
-      fileSize: "1.2 MB",
-      generatedAt: "2026-06-05 15:00",
-      generatedBy: "Trần Văn B (Admin)"
-    },
-    {
-      id: "rep-102",
-      fileName: "bao-cao-luu-luong-hanh-khach-tuan-22.pdf",
-      category: "TRAFFIC",
-      format: "PDF",
-      fileSize: "840 KB",
-      generatedAt: "2026-06-01 09:15",
-      generatedBy: "Nguyễn Văn A (System)"
-    },
-    {
-      id: "rep-103",
-      fileName: "nhat-ky-doi-soat-va-chenh-lech-thang-04-2026.csv",
-      category: "SETTLEMENT",
-      format: "CSV",
-      fileSize: "320 KB",
-      generatedAt: "2026-05-02 10:30",
-      generatedBy: "Lê Văn C (Kế toán)"
-    }
-  ]);
+  const [reports, setReports] = useState<ExportedReport[]>([]);
 
   const [category, setCategory] = useState<"REVENUE" | "TRAFFIC" | "ANOMALY" | "SETTLEMENT">("REVENUE");
   const [format, setFormat] = useState<"PDF" | "EXCEL" | "CSV">("EXCEL");

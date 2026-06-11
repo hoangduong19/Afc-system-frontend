@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Ban,
   Plus,
@@ -9,8 +9,10 @@ import {
   XCircle,
   AlertOctagon,
   Unlock,
-  X
+  X,
+  AlertTriangle
 } from "lucide-react";
+import { fetchApi } from "@/lib/api";
 
 interface BlacklistedCard {
   id: string;
@@ -21,38 +23,49 @@ interface BlacklistedCard {
 }
 
 export default function BlacklistPage() {
-  const [blacklist, setBlacklist] = useState<BlacklistedCard[]>([
-    {
-      id: "bl-1",
-      cardUid: "04:AA:BB:CC:DD:EE:FF",
-      reason: "DEBT",
-      notes: "Nợ cước chưa thanh toán: ₫ 45,000",
-      blockedAt: "2026-02-15 10:30"
-    },
-    {
-      id: "bl-2",
-      cardUid: "04:12:34:56:78:9A:BC",
-      reason: "STOLEN",
-      notes: "Hành khách báo mất thẻ lúc 09:00",
-      blockedAt: "2026-02-18 09:20"
-    },
-    {
-      id: "bl-3",
-      cardUid: "04:DE:AD:BE:EF:00:11",
-      reason: "FRAUD",
-      notes: "Phát hiện mã SAM giả mạo tại ga Láng",
-      blockedAt: "2026-02-22 14:15"
-    }
-  ]);
+  const [blacklist, setBlacklist] = useState<BlacklistedCard[]>([]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [reasonFilter, setReasonFilter] = useState("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Form State
   const [cardUid, setCardUid] = useState("");
   const [reason, setReason] = useState<"DEBT" | "STOLEN" | "FRAUD">("DEBT");
   const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [blacklistData, cardsData] = await Promise.all([
+          fetchApi("/api/blacklist"),
+          fetchApi("/api/cards")
+        ]);
+        
+        let cardMap: Record<string, string> = {};
+        if (Array.isArray(cardsData)) {
+          cardsData.forEach((c) => {
+            cardMap[c.id] = c.cardUid;
+          });
+        }
+        
+        if (Array.isArray(blacklistData)) {
+          setBlacklist(blacklistData.map((b) => ({
+            id: b.id,
+            cardUid: b.cardUid || cardMap[b.cardId] || "Mã thẻ ẩn",
+            reason: b.reason || "DEBT",
+            notes: b.reason === "DEBT" ? "Nợ cước chưa thanh toán" : b.reason === "STOLEN" ? "Báo mất thẻ vật lý" : "Gian lận / Phát hiện giả mạo",
+            blockedAt: b.addedAt ? new Date(b.addedAt).toISOString().replace("T", " ").substring(0, 16) : ""
+          })));
+        }
+      } catch (err: any) {
+        console.warn("FMC Blacklist API is offline. Running in mock fallback mode. Error:", err.message);
+        setIsOffline(true);
+      }
+    }
+    loadData();
+  }, []);
 
   const handleOpenModal = () => {
     setCardUid("");
@@ -61,22 +74,61 @@ export default function BlacklistPage() {
     setIsModalOpen(true);
   };
 
-  const handleAddBlacklist = (e: React.FormEvent) => {
+  const handleAddBlacklist = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newBlocked: BlacklistedCard = {
-      id: `bl-${Date.now()}`,
-      cardUid,
-      reason,
-      notes,
-      blockedAt: new Date().toISOString().replace("T", " ").substring(0, 16)
-    };
-    setBlacklist([newBlocked, ...blacklist]);
+    
+    let resolvedCardId = cardUid;
+    try {
+      const cardsList = await fetchApi("/api/cards");
+      if (Array.isArray(cardsList)) {
+        const matched = cardsList.find((c) => c.cardUid.toLowerCase() === cardUid.trim().toLowerCase());
+        if (matched) {
+          resolvedCardId = matched.id;
+        }
+      }
+    } catch (e) {}
+
+    try {
+      const res = await fetchApi("/api/blacklist", {
+        method: "POST",
+        body: JSON.stringify({
+          cardId: resolvedCardId,
+          reason: reason
+        })
+      });
+      
+      setBlacklist([{
+        id: res.id,
+        cardUid: cardUid,
+        reason: reason,
+        notes: notes || (reason === "DEBT" ? "Nợ cước chưa thanh toán" : reason === "STOLEN" ? "Báo mất thẻ vật lý" : "Gian lận / Phát hiện giả mạo"),
+        blockedAt: res.addedAt ? new Date(res.addedAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16)
+      }, ...blacklist]);
+    } catch (err: any) {
+      console.warn("POST /api/blacklist failed, using mock local state. Error:", err.message);
+      setIsOffline(true);
+      
+      const newBlocked = {
+        id: "bl-" + Date.now(),
+        cardUid,
+        reason,
+        notes: notes || (reason === "DEBT" ? "Nợ cước chưa thanh toán" : reason === "STOLEN" ? "Báo mất thẻ vật lý" : "Gian lận / Phát hiện giả mạo"),
+        blockedAt: new Date().toISOString().replace("T", " ").substring(0, 16)
+      };
+      setBlacklist([newBlocked, ...blacklist]);
+    }
     setIsModalOpen(false);
   };
 
-  const handleRemoveFromBlacklist = (id: string, uid: string) => {
-    if (confirm(`Bạn có chắc chắn muốn mở khóa và gỡ thẻ ${uid} khỏi danh sách đen?`)) {
+  const handleRemoveFromBlacklist = async (id: string, uid: string) => {
+    if (confirm("Bạn có chắc chắn muốn mở khóa và gỡ thẻ " + uid + " khỏi danh sách đen?")) {
       setBlacklist(blacklist.filter((item) => item.id !== id));
+      try {
+        await fetchApi("/api/blacklist/" + id, { method: "DELETE" });
+      } catch (err: any) {
+        console.warn("DELETE /api/blacklist failed, using mock local state. Error:", err.message);
+        setIsOffline(true);
+      }
     }
   };
 
@@ -88,6 +140,13 @@ export default function BlacklistPage() {
 
   return (
     <div className="space-y-6">
+      {isOffline && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
+          </span>
+        </div>
+      )}    
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>

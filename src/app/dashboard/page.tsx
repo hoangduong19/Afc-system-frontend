@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Coins,
   TrendingUp,
@@ -8,12 +8,68 @@ import {
   RefreshCw,
   AlertTriangle
 } from "lucide-react";
+import Link from "next/link";
+import { fetchApi } from "@/lib/api";
 
 export default function OverviewPage() {
   const [chartPeriod, setChartPeriod] = useState("7 ngày qua");
+  const [isOffline, setIsOffline] = useState(false);
+  
+  // Real data state
+  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+  const [recentAnomalies, setRecentAnomalies] = useState<any[]>([]);
+  const [counts, setCounts] = useState({
+    transactions: 0,
+    anomalies: 0,
+    unresolvedAnomalies: 0,
+    revenue: 0,
+    activeCards: 0,
+    suspendedCards: 0,
+    blacklistedCards: 0,
+    pendingL4: 0
+  });
+
+  useEffect(() => {
+    async function loadDashboardData() {
+      try {
+        const txData = await fetchApi("/api/transactions", { params: { size: 5 } });
+        const anomalyData = await fetchApi("/api/anomalies", { params: { size: 5, isResolved: false } });
+        
+        if (txData && txData.content) {
+          setRecentTransactions(txData.content);
+          setCounts(prev => ({
+            ...prev,
+            revenue: txData.content.reduce((acc: number, t: any) => acc + (t.fareAmount || 0), 0),
+            transactions: txData.totalElements || txData.content.length
+          }));
+        }
+        
+        if (anomalyData && anomalyData.content) {
+          setRecentAnomalies(anomalyData.content);
+          setCounts(prev => ({
+            ...prev,
+            anomalies: anomalyData.totalElements || anomalyData.content.length,
+            unresolvedAnomalies: anomalyData.content.filter((a: any) => !a.isResolved).length
+          }));
+        }
+      } catch (err: any) {
+        console.warn("FMC Dashboard API is offline.", err.message);
+        setIsOffline(true);
+      }
+    }
+    loadDashboardData();
+  }, []);
 
   return (
     <>
+      {isOffline && (
+        <div className="mb-6 px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4" /> Hệ thống đang chạy ở chế độ mô phỏng ngoại tuyến (Mock Fallback Mode). Kết nối tới Backend API thất bại.
+          </span>
+        </div>
+      )}
+
       {/* Summary Bento Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-grid-gutter mb-8">
         {/* Revenue Card */}
@@ -26,11 +82,13 @@ export default function OverviewPage() {
           </h3>
           <div className="flex items-baseline gap-2 mb-4">
             <span className="font-display text-display text-on-surface">
-              ₫ 1,245,600,000
+              ₫ {counts.revenue.toLocaleString()}
             </span>
-            <span className="text-tertiary-fixed-dim font-body-sm text-body-sm flex items-center gap-0.5">
-              <TrendingUp className="h-3.5 w-3.5" /> +12.5%
-            </span>
+            {counts.revenue > 0 && (
+              <span className="text-tertiary-fixed-dim font-body-sm text-body-sm flex items-center gap-0.5">
+                <TrendingUp className="h-3.5 w-3.5" /> —
+              </span>
+            )}
           </div>
           {/* Sparkline simulation */}
           <div className="h-12 w-full bg-surface-container-high rounded-md overflow-hidden relative flex items-end justify-between px-1">
@@ -50,10 +108,10 @@ export default function OverviewPage() {
             <Ticket className="h-5 w-5 text-on-surface-variant" />
           </div>
           <div className="font-display text-2xl font-bold text-on-surface mb-1">
-            84,521
+            {counts.transactions.toLocaleString()}
           </div>
           <p className="font-body-sm text-body-sm text-on-surface-variant">
-            So với hôm qua: <span className="text-tertiary-fixed-dim">+3.2%</span>
+            Tổng giao dịch ghi nhận
           </p>
         </div>
 
@@ -66,7 +124,7 @@ export default function OverviewPage() {
             <RefreshCw className="h-5 w-5 text-on-surface-variant animate-spin-slow" />
           </div>
           <div className="font-display text-2xl font-bold text-on-surface mb-1">
-            12,045
+            {counts.pendingL4.toLocaleString()}
           </div>
           <div className="w-full bg-surface-container-high rounded-full h-1.5 mt-3 overflow-hidden">
             <div className="bg-secondary h-1.5 rounded-full" style={{ width: "45%" }} />
@@ -83,15 +141,15 @@ export default function OverviewPage() {
               <AlertTriangle className="h-5 w-5 text-on-error-container animate-bounce" />
             </div>
             <div className="font-display text-2xl font-bold text-on-error-container mb-1">
-              24
+              {counts.anomalies.toLocaleString()}
             </div>
             <p className="font-body-sm text-body-sm text-on-error-container/80">
-              Cần xử lý ngay: 5
+              Cần xử lý ngay: {counts.unresolvedAnomalies}
             </p>
           </div>
-          <button className="mt-3 px-3 py-1.5 bg-on-error-container text-error-container rounded-md font-label-caps text-xs uppercase w-full hover:bg-on-error-container/95 transition-colors cursor-pointer">
+          <Link href="/dashboard/anomalies" className="mt-3 px-3 py-1.5 bg-on-error-container text-error-container rounded-md font-label-caps text-xs uppercase w-full hover:bg-on-error-container/95 transition-colors cursor-pointer text-center block">
             Xem chi tiết
-          </button>
+          </Link>
         </div>
 
         {/* Card Status Breakdown */}
@@ -103,28 +161,28 @@ export default function OverviewPage() {
             <div>
               <div className="flex justify-between mb-1">
                 <span className="font-body-sm text-body-sm">Active</span>
-                <span className="font-data-mono text-data-mono font-semibold">1,200,450</span>
+                <span className="font-data-mono text-data-mono font-semibold">{counts.activeCards.toLocaleString()}</span>
               </div>
               <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden">
-                <div className="bg-tertiary-fixed-dim h-2 rounded-full" style={{ width: "85%" }} />
+                <div className="bg-tertiary-fixed-dim h-2 rounded-full" style={{ width: `${counts.activeCards > 0 ? Math.min(Math.round(counts.activeCards / (counts.activeCards + counts.suspendedCards + counts.blacklistedCards) * 100), 100) : 0}%` }} />
               </div>
             </div>
             <div>
               <div className="flex justify-between mb-1">
                 <span className="font-body-sm text-body-sm">Suspended</span>
-                <span className="font-data-mono text-data-mono font-semibold">45,200</span>
+                <span className="font-data-mono text-data-mono font-semibold">{counts.suspendedCards.toLocaleString()}</span>
               </div>
               <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden">
-                <div className="bg-secondary-fixed-dim h-2 rounded-full" style={{ width: "10%" }} />
+                <div className="bg-secondary-fixed-dim h-2 rounded-full" style={{ width: `${counts.suspendedCards > 0 ? Math.min(Math.round(counts.suspendedCards / (counts.activeCards + counts.suspendedCards + counts.blacklistedCards) * 100), 100) : 0}%` }} />
               </div>
             </div>
             <div>
               <div className="flex justify-between mb-1">
                 <span className="font-body-sm text-body-sm">Blacklisted</span>
-                <span className="font-data-mono text-data-mono font-semibold">8,930</span>
+                <span className="font-data-mono text-data-mono font-semibold">{counts.blacklistedCards.toLocaleString()}</span>
               </div>
               <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden">
-                <div className="bg-error h-2 rounded-full" style={{ width: "5%" }} />
+                <div className="bg-error h-2 rounded-full" style={{ width: `${counts.blacklistedCards > 0 ? Math.min(Math.round(counts.blacklistedCards / (counts.activeCards + counts.suspendedCards + counts.blacklistedCards) * 100), 100) : 0}%` }} />
               </div>
             </div>
           </div>
@@ -221,16 +279,16 @@ export default function OverviewPage() {
             <h3 className="font-headline-sm text-headline-sm text-on-surface">
               Giao dịch gần đây
             </h3>
-            <button className="text-secondary font-label-caps text-label-caps uppercase hover:underline text-xs cursor-pointer">
+            <Link href="/dashboard/transactions" className="text-secondary font-label-caps text-label-caps uppercase hover:underline text-xs cursor-pointer">
               Xem tất cả
-            </button>
+            </Link>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-surface-container-low border-b border-outline-variant text-[11px]">
                   <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
-                    Mã GD (UID)
+                    Mã GD (ID)
                   </th>
                   <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
                     Mã Thẻ
@@ -244,31 +302,25 @@ export default function OverviewPage() {
                 </tr>
               </thead>
               <tbody className="font-data-mono text-data-mono text-xs">
-                {[
-                  { uid: "TX-8A9F21", card: "C-4492-11", amount: "8,000", status: "success", label: "Thành công" },
-                  { uid: "TX-8A9F22", card: "C-1029-45", amount: "15,000", status: "success", label: "Thành công" },
-                  { uid: "TX-8A9F23", card: "C-9921-00", amount: "8,000", status: "pending", label: "Chờ xử lý" },
-                  { uid: "TX-8A9F24", card: "C-5541-22", amount: "0", status: "error", label: "Từ chối" },
-                  { uid: "TX-8A9F25", card: "C-3321-99", amount: "12,000", status: "success", label: "Thành công" }
-                ].map((row, idx) => (
+                {recentTransactions.map((row, idx) => (
                   <tr
-                    key={idx}
+                    key={row.id || idx}
                     className="border-b border-outline-variant hover:bg-surface-container-low transition-colors h-[40px]"
                   >
-                    <td className="p-table-cell-padding text-on-surface">{row.uid}</td>
-                    <td className="p-table-cell-padding text-on-surface-variant">{row.card}</td>
-                    <td className="p-table-cell-padding text-right text-on-surface font-semibold">{row.amount}</td>
+                    <td className="p-table-cell-padding text-on-surface">{(row.id || "").slice(0, 8).toUpperCase()}</td>
+                    <td className="p-table-cell-padding text-on-surface-variant">{row.cardUid}</td>
+                    <td className="p-table-cell-padding text-right text-on-surface font-semibold">₫ {(row.fareAmount || 0).toLocaleString()}</td>
                     <td className="p-table-cell-padding">
                       <span
                         className={`px-2 py-0.5 rounded font-body-sm text-[11px] font-medium ${
-                          row.status === "success"
+                          row.status === "COMPLETED"
                             ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
-                            : row.status === "pending"
+                            : row.status === "DEBT"
                             ? "bg-surface-variant text-on-surface-variant"
                             : "bg-error-container text-on-error-container"
                         }`}
                       >
-                        {row.label}
+                        {row.status === "COMPLETED" ? "Thành công" : row.status === "DEBT" ? "Ghi nợ" : row.status || "Chờ xử lý"}
                       </span>
                     </td>
                   </tr>
@@ -284,9 +336,9 @@ export default function OverviewPage() {
             <h3 className="font-headline-sm text-headline-sm text-on-surface">
               Cảnh báo gần đây
             </h3>
-            <button className="text-secondary font-label-caps text-label-caps uppercase hover:underline text-xs cursor-pointer">
+            <Link href="/dashboard/anomalies" className="text-secondary font-label-caps text-label-caps uppercase hover:underline text-xs cursor-pointer">
               Xử lý ngay
-            </button>
+            </Link>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -307,39 +359,36 @@ export default function OverviewPage() {
                 </tr>
               </thead>
               <tbody className="font-body-sm text-body-sm text-xs">
-                {[
-                  { type: "Sai lệch mã SAM", level: "critical", label: "CRITICAL", time: "10:42:15" },
-                  { type: "Thẻ blacklist chạm cổng", level: "high", label: "HIGH", time: "10:38:02" },
-                  { type: "Giao dịch trùng lặp", level: "medium", label: "MEDIUM", time: "10:15:44" },
-                  { type: "Mất kết nối Ga Cát Linh", level: "critical", label: "CRITICAL", time: "09:55:10" },
-                  { type: "Sai lệch doanh thu C4-C5", level: "high", label: "HIGH", time: "08:00:00" }
-                ].map((row, idx) => (
-                  <tr
-                    key={idx}
-                    className="border-b border-outline-variant hover:bg-surface-container-low transition-colors h-[40px]"
-                  >
-                    <td className="p-table-cell-padding text-on-surface font-semibold">{row.type}</td>
-                    <td className="p-table-cell-padding">
-                      <span
-                        className={`px-2 py-0.5 rounded font-label-caps text-[10px] font-bold ${
-                          row.level === "critical"
-                            ? "bg-error text-on-error"
-                            : row.level === "high"
-                            ? "bg-error-container text-on-error-container"
-                            : "bg-surface-variant text-on-surface-variant"
-                        }`}
-                      >
-                        {row.label}
-                      </span>
-                    </td>
-                    <td className="p-table-cell-padding font-data-mono text-on-surface-variant">{row.time}</td>
-                    <td className="p-table-cell-padding">
-                      <button className="text-secondary hover:underline cursor-pointer">
-                        Chi tiết
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {recentAnomalies.map((row, idx) => {
+                  const detectedTime = row.detectedAt ? new Date(row.detectedAt).toLocaleTimeString() : "";
+                  return (
+                    <tr
+                      key={row.id || idx}
+                      className="border-b border-outline-variant hover:bg-surface-container-low transition-colors h-[40px]"
+                    >
+                      <td className="p-table-cell-padding text-on-surface font-semibold">{row.anomalyType}</td>
+                      <td className="p-table-cell-padding">
+                        <span
+                          className={`px-2 py-0.5 rounded font-label-caps text-[10px] font-bold ${
+                            row.severity === "CRITICAL"
+                              ? "bg-error text-on-error"
+                              : row.severity === "HIGH"
+                              ? "bg-error-container text-on-error-container"
+                              : "bg-surface-variant text-on-surface-variant"
+                          }`}
+                        >
+                          {row.severity}
+                        </span>
+                      </td>
+                      <td className="p-table-cell-padding font-data-mono text-on-surface-variant">{detectedTime}</td>
+                      <td className="p-table-cell-padding">
+                        <Link href="/dashboard/anomalies" className="text-secondary hover:underline cursor-pointer">
+                          Chi tiết
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

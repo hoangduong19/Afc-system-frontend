@@ -35,49 +35,9 @@ interface WebhookSub {
 }
 
 export default function IntegrationsPage() {
-  const [clients, setClients] = useState<ApiClient[]>([
-    {
-      clientId: "cli-hurc-afc-01",
-      clientName: "HURC Cát Linh Ticket Validators",
-      role: "AFC_DEVICE",
-      status: "ACTIVE",
-      tokenPrefix: "fmc_live_afc_catlinh_...",
-      createdAt: "2026-01-15 11:20"
-    },
-    {
-      clientId: "cli-transerco-bus-02",
-      clientName: "TRANSERCO Bus GPS & Ticket Readers",
-      role: "AFC_DEVICE",
-      status: "ACTIVE",
-      tokenPrefix: "fmc_live_afc_bus_...",
-      createdAt: "2026-01-20 14:05"
-    },
-    {
-      clientId: "cli-viettelpay-app-03",
-      clientName: "ViettelPay Ticket Selling Integration",
-      role: "PARTNER_APP",
-      status: "ACTIVE",
-      tokenPrefix: "fmc_live_part_vtp_...",
-      createdAt: "2026-02-10 09:30"
-    }
-  ]);
+  const [clients, setClients] = useState<ApiClient[]>([]);
 
-  const [webhooks, setWebhooks] = useState<WebhookSub[]>([
-    {
-      id: "wh-vtp",
-      url: "https://partner-api.viettelpay.vn/fmc-webhook",
-      events: ["transaction.created", "blacklist.sync"],
-      status: "ACTIVE",
-      secretKey: "whsec_VTP_fmc_integration_2026_key"
-    },
-    {
-      id: "wh-transerco",
-      url: "https://fmc-integration.transerco.com.vn/api/v1/notify",
-      events: ["blacklist.sync"],
-      status: "ACTIVE",
-      secretKey: "whsec_TRC_bus_sync_secret_key"
-    }
-  ]);
+  const [webhooks, setWebhooks] = useState<WebhookSub[]>([]);
 
   // Modal states
   const [isClientModalOpen, setIsClientModalOpen] = useState(false);

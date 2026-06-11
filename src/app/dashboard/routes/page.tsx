@@ -1,6 +1,5 @@
 "use client";
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Route as RouteIcon,
   Plus,
@@ -9,8 +8,10 @@ import {
   Trash2,
   X,
   Layers,
-  Info
+  Info,
+  AlertTriangle
 } from "lucide-react";
+import { fetchApi } from "@/lib/api";
 
 interface RouteItem {
   id: string;
@@ -23,35 +24,7 @@ interface RouteItem {
 }
 
 export default function RoutesPage() {
-  const [routes, setRoutes] = useState<RouteItem[]>([
-    {
-      id: "rt-1",
-      code: "R-M1",
-      name: "Tuyến đường sắt Cát Linh - Hà Đông",
-      operatorId: "op-1",
-      operatorCode: "HURC",
-      type: "METRO",
-      createdAt: "2026-01-10 10:00"
-    },
-    {
-      id: "rt-2",
-      code: "R-B01",
-      name: "Tuyến xe buýt 01 (Long Biên - Yên Nghĩa)",
-      operatorId: "op-2",
-      operatorCode: "TRANSERCO",
-      type: "BUS",
-      createdAt: "2026-01-15 11:20"
-    },
-    {
-      id: "rt-3",
-      code: "R-B02",
-      name: "Tuyến xe buýt 02 (Bác Cổ - Yên Nghĩa)",
-      operatorId: "op-2",
-      operatorCode: "TRANSERCO",
-      type: "BUS",
-      createdAt: "2026-01-15 11:25"
-    }
-  ]);
+  const [routes, setRoutes] = useState<RouteItem[]>([]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
@@ -59,6 +32,7 @@ export default function RoutesPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"CREATE" | "EDIT">("CREATE");
   const [selectedRoute, setSelectedRoute] = useState<RouteItem | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Form State
   const [code, setCode] = useState("");
@@ -66,10 +40,48 @@ export default function RoutesPage() {
   const [operatorCode, setOperatorCode] = useState("HURC");
   const [type, setType] = useState<"METRO" | "BUS">("METRO");
 
-  const operatorsList = [
-    { code: "HURC", name: "Hanoi Metro (HURC)" },
-    { code: "TRANSERCO", name: "Bus (TRANSERCO)" }
-  ];
+  const [operatorsList, setOperatorsList] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [routesData, opsData] = await Promise.all([
+          fetchApi("/api/routes"),
+          fetchApi("/api/operators")
+        ]);
+        
+        let opMap: Record<string, string> = {};
+        if (Array.isArray(opsData)) {
+          setOperatorsList(opsData.map((o: any) => ({
+            id: o.id,
+            code: o.code,
+            name: `${o.name} (${o.code})`
+          })));
+          opsData.forEach((o: any) => {
+            opMap[o.id] = o.code;
+          });
+        } else {
+          opMap = { "op-1": "HURC", "op-2": "TRANSERCO" };
+        }
+        
+        if (Array.isArray(routesData)) {
+          setRoutes(routesData.map((r: any) => ({
+            id: r.id,
+            code: r.code,
+            name: r.name,
+            operatorId: r.operatorId,
+            operatorCode: r.operatorCode || opMap[r.operatorId] || "HURC",
+            type: r.type || "METRO",
+            createdAt: r.createdAt ? new Date(r.createdAt).toISOString().replace("T", " ").substring(0, 16) : ""
+          })));
+        }
+      } catch (err: any) {
+        console.warn("FMC Routes/Operators API is offline. Running in mock fallback mode. Error:", err.message);
+        setIsOffline(true);
+      }
+    }
+    loadData();
+  }, []);
 
   const handleOpenCreateModal = () => {
     setModalMode("CREATE");
@@ -90,35 +102,81 @@ export default function RoutesPage() {
     setIsModalOpen(true);
   };
 
-  const handleDeleteRoute = (id: string) => {
+  const handleDeleteRoute = async (id: string) => {
     if (confirm("Bạn có chắc chắn muốn xóa tuyến này khỏi hệ thống?")) {
       setRoutes(routes.filter((route) => route.id !== id));
+      try {
+        await fetchApi(`/api/routes/${id}`, { method: "DELETE" });
+      } catch (err: any) {
+        console.warn("DELETE /api/routes failed, using local state. Error:", err.message);
+        setIsOffline(true);
+      }
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const currentOp = operatorsList.find((o) => o.code === operatorCode);
+    const opId = currentOp ? currentOp.id : (operatorCode === "HURC" ? "op-1" : "op-2");
     
     if (modalMode === "CREATE") {
-      const newRoute: RouteItem = {
-        id: `rt-${Date.now()}`,
-        code,
-        name,
-        operatorId: operatorCode === "HURC" ? "op-1" : "op-2",
-        operatorCode,
-        type,
-        createdAt: new Date().toISOString().replace("T", " ").substring(0, 16)
-      };
-      setRoutes([...routes, newRoute]);
+      try {
+        const newRoute = await fetchApi("/api/routes", {
+          method: "POST",
+          body: JSON.stringify({
+            code,
+            name,
+            operatorId: opId,
+            type
+          })
+        });
+        setRoutes([...routes, {
+          id: newRoute.id,
+          code: newRoute.code,
+          name: newRoute.name,
+          operatorId: newRoute.operatorId,
+          operatorCode: operatorCode,
+          type: newRoute.type || type,
+          createdAt: newRoute.createdAt ? new Date(newRoute.createdAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16)
+        }]);
+      } catch (err: any) {
+        console.warn("POST /api/routes failed, falling back to local creation. Error:", err.message);
+        setIsOffline(true);
+        const fallbackRoute: RouteItem = {
+          id: `rt-${Date.now()}`,
+          code,
+          name,
+          operatorId: opId,
+          operatorCode,
+          type,
+          createdAt: new Date().toISOString().replace("T", " ").substring(0, 16)
+        };
+        setRoutes([...routes, fallbackRoute]);
+      }
     } else if (modalMode === "EDIT" && selectedRoute) {
-      setRoutes(
-        routes.map((rt) =>
-          rt.id === selectedRoute.id
-            ? { ...rt, code, name, operatorCode, type, operatorId: operatorCode === "HURC" ? "op-1" : "op-2" }
-            : rt
-        )
-      );
+      try {
+        const updatedRoute = await fetchApi(`/api/routes/${selectedRoute.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ name })
+        });
+        setRoutes(
+          routes.map((rt) =>
+            rt.id === selectedRoute.id
+              ? { ...rt, name: updatedRoute.name || name, operatorCode, type, operatorId: opId }
+              : rt
+          )
+        );
+      } catch (err: any) {
+        console.warn("PUT /api/routes failed, falling back to local update. Error:", err.message);
+        setIsOffline(true);
+        setRoutes(
+          routes.map((rt) =>
+            rt.id === selectedRoute.id
+              ? { ...rt, name, operatorCode, type, operatorId: opId }
+              : rt
+          )
+        );
+      }
     }
     setIsModalOpen(false);
   };
@@ -135,6 +193,14 @@ export default function RoutesPage() {
 
   return (
     <div className="space-y-6">
+      {isOffline && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>

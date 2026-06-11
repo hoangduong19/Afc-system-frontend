@@ -1,6 +1,5 @@
 "use client";
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Building2,
   Plus,
@@ -10,8 +9,10 @@ import {
   Power,
   CheckCircle,
   XCircle,
-  X
+  X,
+  AlertTriangle
 } from "lucide-react";
+import { fetchApi } from "@/lib/api";
 
 interface Operator {
   id: string;
@@ -23,35 +24,41 @@ interface Operator {
 }
 
 export default function OperatorsPage() {
-  const [operators, setOperators] = useState<Operator[]>([
-    {
-      id: "op-1",
-      code: "HURC",
-      name: "Công ty Đường sắt Đô thị Hà Nội (Hanoi Metro)",
-      status: "ACTIVE",
-      createdAt: "2026-01-10 08:30",
-      routesCount: 2
-    },
-    {
-      id: "op-2",
-      code: "TRANSERCO",
-      name: "Tổng công ty Vận tải Hà Nội (Bus)",
-      status: "ACTIVE",
-      createdAt: "2026-01-15 09:15",
-      routesCount: 12
-    }
-  ]);
+  const [operators, setOperators] = useState<Operator[]>([]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"CREATE" | "EDIT">("CREATE");
   const [selectedOperator, setSelectedOperator] = useState<Operator | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Form State
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [status, setStatus] = useState<"ACTIVE" | "DEACTIVE">("ACTIVE");
+
+  useEffect(() => {
+    async function loadOperators() {
+      try {
+        const data = await fetchApi("/api/operators");
+        if (Array.isArray(data)) {
+          setOperators(data.map((o: any) => ({
+            id: o.id,
+            code: o.code,
+            name: o.name,
+            status: o.status || "ACTIVE",
+            createdAt: o.createdAt ? new Date(o.createdAt).toISOString().replace("T", " ").substring(0, 16) : "",
+            routesCount: o.routesCount || 0
+          })));
+        }
+      } catch (err: any) {
+        console.warn("FMC Operators API is offline. Running in mock fallback mode. Error:", err.message);
+        setIsOffline(true);
+      }
+    }
+    loadOperators();
+  }, []);
 
   const handleOpenCreateModal = () => {
     setModalMode("CREATE");
@@ -70,34 +77,78 @@ export default function OperatorsPage() {
     setIsModalOpen(true);
   };
 
-  const handleToggleStatus = (id: string) => {
+  const handleToggleStatus = async (id: string) => {
+    const operatorToToggle = operators.find(o => o.id === id);
+    if (!operatorToToggle) return;
+    
+    const newStatus = operatorToToggle.status === "ACTIVE" ? "DEACTIVE" : "ACTIVE";
     setOperators(
       operators.map((op) =>
-        op.id === id
-          ? { ...op, status: op.status === "ACTIVE" ? "DEACTIVE" : "ACTIVE" }
-          : op
+        op.id === id ? { ...op, status: newStatus } : op
       )
     );
+    
+    try {
+      if (newStatus === "DEACTIVE") {
+        await fetchApi(`/api/operators/${id}/deactivate`, { method: "PATCH" });
+      } else {
+        console.warn("No activation endpoint, toggled locally");
+      }
+    } catch (err: any) {
+      console.warn("Backend toggle operator status failed, using mock local state. Error:", err.message);
+      setIsOffline(true);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (modalMode === "CREATE") {
-      const newOp: Operator = {
-        id: `op-${Date.now()}`,
-        code,
-        name,
-        status,
-        createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-        routesCount: 0
-      };
-      setOperators([...operators, newOp]);
+      try {
+        const newOp = await fetchApi("/api/operators", {
+          method: "POST",
+          body: JSON.stringify({ code, name })
+        });
+        setOperators([...operators, {
+          id: newOp.id,
+          code: newOp.code,
+          name: newOp.name,
+          status: newOp.status || "ACTIVE",
+          createdAt: newOp.createdAt ? new Date(newOp.createdAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16),
+          routesCount: 0
+        }]);
+      } catch (err: any) {
+        console.warn("POST /api/operators failed, falling back to local creation. Error:", err.message);
+        setIsOffline(true);
+        const fallbackOp: Operator = {
+          id: `op-${Date.now()}`,
+          code,
+          name,
+          status,
+          createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+          routesCount: 0
+        };
+        setOperators([...operators, fallbackOp]);
+      }
     } else if (modalMode === "EDIT" && selectedOperator) {
-      setOperators(
-        operators.map((op) =>
-          op.id === selectedOperator.id ? { ...op, code, name, status } : op
-        )
-      );
+      try {
+        const updatedOp = await fetchApi(`/api/operators/${selectedOperator.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ name })
+        });
+        setOperators(
+          operators.map((op) =>
+            op.id === selectedOperator.id ? { ...op, name: updatedOp.name || name } : op
+          )
+        );
+      } catch (err: any) {
+        console.warn("PUT /api/operators failed, falling back to local update. Error:", err.message);
+        setIsOffline(true);
+        setOperators(
+          operators.map((op) =>
+            op.id === selectedOperator.id ? { ...op, name } : op
+          )
+        );
+      }
     }
     setIsModalOpen(false);
   };
@@ -112,6 +163,14 @@ export default function OperatorsPage() {
 
   return (
     <div className="space-y-6">
+      {isOffline && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>

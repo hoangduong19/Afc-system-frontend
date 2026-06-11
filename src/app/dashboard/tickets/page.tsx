@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Ticket,
   Plus,
@@ -13,8 +13,10 @@ import {
   ArrowRight,
   TrendingUp,
   Tag,
-  X
+  X,
+  AlertTriangle
 } from "lucide-react";
+import { fetchApi } from "@/lib/api";
 
 interface TicketItem {
   ticketId: string;
@@ -32,68 +34,13 @@ interface TicketItem {
 }
 
 export default function TicketsPage() {
-  const [tickets, setTickets] = useState<TicketItem[]>([
-    {
-      ticketId: "tk-8893-a1",
-      type: "SINGLE_TRIP",
-      mode: "METRO",
-      scope: "STATION_TO_STATION",
-      status: "ACTIVE",
-      fromStationCode: "MS01 (Cát Linh)",
-      toStationCode: "MS05 (Vành Đai 3)",
-      price: 13000,
-      validFrom: "2026-06-11",
-      validTo: "2026-06-11",
-      purchasedAt: "2026-06-11 08:30",
-      qrToken: "QR-SINGLE-TRIP-8893-A1-METRO-CATLINH-VANHDAI3"
-    },
-    {
-      ticketId: "tk-1204-b2",
-      type: "MONTHLY_PASS",
-      mode: "ANY",
-      scope: "MULTI_ROUTE",
-      status: "ACTIVE",
-      fromStationCode: "ALL",
-      toStationCode: "ALL",
-      price: 200000,
-      validFrom: "2026-06-01",
-      validTo: "2026-06-30",
-      purchasedAt: "2026-05-28 14:15",
-      qrToken: "QR-MONTHLY-PASS-1204-B2-ALL-ROUTES"
-    },
-    {
-      ticketId: "tk-4509-c3",
-      type: "SINGLE_TRIP",
-      mode: "BUS",
-      scope: "STATION_TO_STATION",
-      status: "USED",
-      fromStationCode: "BS12 (Hào Nam)",
-      toStationCode: "BS18 (Cầu Giấy)",
-      price: 7000,
-      validFrom: "2026-06-10",
-      validTo: "2026-06-10",
-      purchasedAt: "2026-06-10 17:45",
-      qrToken: "QR-SINGLE-TRIP-4509-C3-BUS-HAONAM-CAUGIAY"
-    },
-    {
-      ticketId: "tk-9931-d4",
-      type: "MONTHLY_PASS",
-      mode: "METRO",
-      scope: "SINGLE_ROUTE",
-      status: "EXPIRED",
-      fromStationCode: "ALL (Tuyến Cát Linh)",
-      toStationCode: "ALL (Tuyến Cát Linh)",
-      price: 100000,
-      validFrom: "2026-05-01",
-      validTo: "2026-05-31",
-      purchasedAt: "2026-04-29 09:05",
-      qrToken: "QR-MONTHLY-PASS-9931-D4-METRO-LINE2A"
-    }
-  ]);
+  const [tickets, setTickets] = useState<TicketItem[]>([]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [isOffline, setIsOffline] = useState(false);
+  const [stationsList, setStationsList] = useState<any[]>([]);
   
   // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -108,6 +55,43 @@ export default function TicketsPage() {
   const [newPassengerType, setNewPassengerType] = useState("NORMAL");
   const [newValidFrom, setNewValidFrom] = useState("2026-06-11");
 
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [ticketsData, stationsData] = await Promise.all([
+          fetchApi("/api/admin/tickets"),
+          fetchApi("/api/stations")
+        ]);
+        
+        if (Array.isArray(stationsData)) {
+          setStationsList(stationsData);
+        }
+
+        const list = ticketsData.content || ticketsData || [];
+        if (Array.isArray(list)) {
+          setTickets(list.map((t) => ({
+            ticketId: t.ticketId || t.id,
+            type: t.type || "SINGLE_TRIP",
+            mode: t.mode || "METRO",
+            scope: t.scope || "STATION_TO_STATION",
+            status: t.status || "ACTIVE",
+            fromStationCode: t.fromStationCode || "MS01",
+            toStationCode: t.toStationCode || "MS05",
+            price: t.price || 0,
+            validFrom: t.validFrom || "",
+            validTo: t.validTo || "",
+            purchasedAt: t.createdAt ? new Date(t.createdAt).toISOString().replace("T", " ").substring(0, 16) : "",
+            qrToken: t.qrToken || ("QR-" + (t.ticketId || t.id || "").toUpperCase())
+          })));
+        }
+      } catch (err: any) {
+        console.warn("FMC Tickets API is offline. Running in mock fallback mode. Error:", err.message);
+        setIsOffline(true);
+      }
+    }
+    loadData();
+  }, []);
+
   const handleOpenCreateModal = () => {
     setNewType("SINGLE_TRIP");
     setNewMode("METRO");
@@ -118,7 +102,7 @@ export default function TicketsPage() {
     setIsModalOpen(true);
   };
 
-  const handleCreateTicket = (e: React.FormEvent) => {
+  const handleCreateTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     
     let ticketPrice = 13000;
@@ -138,22 +122,73 @@ export default function TicketsPage() {
       validToDate.setMonth(validToDate.getMonth() + 1);
     }
 
-    const newTk: TicketItem = {
-      ticketId: `tk-${Math.floor(1000 + Math.random() * 9000)}-${Math.random().toString(36).substring(2, 4)}`,
-      type: newType,
-      mode: newMode,
-      scope: newType === "SINGLE_TRIP" ? "STATION_TO_STATION" : (newMode === "ANY" ? "MULTI_ROUTE" : "SINGLE_ROUTE"),
-      status: "ACTIVE",
-      fromStationCode: newType === "SINGLE_TRIP" ? newFromStation : "ALL",
-      toStationCode: newType === "SINGLE_TRIP" ? newToStation : "ALL",
-      price: ticketPrice,
-      validFrom: newValidFrom,
-      validTo: validToDate.toISOString().substring(0, 10),
-      purchasedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-      qrToken: `QR-${newType}-${Math.random().toString(36).substring(2, 12).toUpperCase()}`
-    };
+    let resolvedFromId = "11111111-1111-1111-1111-111111111111";
+    let resolvedToId = "22222222-2222-2222-2222-222222222222";
+    if (stationsList.length > 0) {
+      const matchFrom = stationsList.find(s => s.name.toLowerCase().includes(newFromStation.replace(/\(.*?\)/g, "").trim().toLowerCase()) || s.code.toLowerCase() === newFromStation.replace(/\(.*?\)/g, "").trim().toLowerCase());
+      if (matchFrom) resolvedFromId = matchFrom.id;
+      const matchTo = stationsList.find(s => s.name.toLowerCase().includes(newToStation.replace(/\(.*?\)/g, "").trim().toLowerCase()) || s.code.toLowerCase() === newToStation.replace(/\(.*?\)/g, "").trim().toLowerCase());
+      if (matchTo) resolvedToId = matchTo.id;
+    }
 
-    setTickets([newTk, ...tickets]);
+    try {
+      let issuedTicket;
+      if (newType === "SINGLE_TRIP") {
+        issuedTicket = await fetchApi("/api/tickets/single-trip", {
+          method: "POST",
+          body: JSON.stringify({
+            fromStationId: resolvedFromId,
+            toStationId: resolvedToId,
+            mode: newMode,
+            passengerType: newPassengerType
+          })
+        });
+      } else {
+        issuedTicket = await fetchApi("/api/tickets/monthly-pass", {
+          method: "POST",
+          body: JSON.stringify({
+            mode: newMode,
+            scope: newMode === "ANY" ? "MULTI_ROUTE" : "SINGLE_ROUTE",
+            passengerType: newPassengerType
+          })
+        });
+      }
+
+      const newTk: TicketItem = {
+        ticketId: issuedTicket.ticketId || issuedTicket.id,
+        type: issuedTicket.type || newType,
+        mode: issuedTicket.mode || newMode,
+        scope: issuedTicket.scope || (newType === "SINGLE_TRIP" ? "STATION_TO_STATION" : (newMode === "ANY" ? "MULTI_ROUTE" : "SINGLE_ROUTE")),
+        status: issuedTicket.status || "ACTIVE",
+        fromStationCode: newType === "SINGLE_TRIP" ? newFromStation : "ALL",
+        toStationCode: newType === "SINGLE_TRIP" ? newToStation : "ALL",
+        price: issuedTicket.price !== undefined ? issuedTicket.price : ticketPrice,
+        validFrom: issuedTicket.validFrom || newValidFrom,
+        validTo: issuedTicket.validTo || validToDate.toISOString().substring(0, 10),
+        purchasedAt: issuedTicket.createdAt ? new Date(issuedTicket.createdAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16),
+        qrToken: issuedTicket.qrToken || ("QR-" + newType + "-" + Math.random().toString(36).substring(2, 12).toUpperCase())
+      };
+      setTickets([newTk, ...tickets]);
+    } catch (err: any) {
+      console.warn("Ticket issue API failed, using mock local state. Error:", err.message);
+      setIsOffline(true);
+
+      const newTk: TicketItem = {
+        ticketId: "tk-" + Math.floor(1000 + Math.random() * 9000) + "-" + Math.random().toString(36).substring(2, 4),
+        type: newType,
+        mode: newMode,
+        scope: newType === "SINGLE_TRIP" ? "STATION_TO_STATION" : (newMode === "ANY" ? "MULTI_ROUTE" : "SINGLE_ROUTE"),
+        status: "ACTIVE",
+        fromStationCode: newType === "SINGLE_TRIP" ? newFromStation : "ALL",
+        toStationCode: newType === "SINGLE_TRIP" ? newToStation : "ALL",
+        price: ticketPrice,
+        validFrom: newValidFrom,
+        validTo: validToDate.toISOString().substring(0, 10),
+        purchasedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+        qrToken: "QR-" + newType + "-" + Math.random().toString(36).substring(2, 12).toUpperCase()
+      };
+      setTickets([newTk, ...tickets]);
+    }
     setIsModalOpen(false);
   };
 
@@ -174,6 +209,13 @@ export default function TicketsPage() {
 
   return (
     <div className="space-y-6">
+      {isOffline && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
+          </span>
+        </div>
+      )}    
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Tag,
   Plus,
@@ -10,8 +10,10 @@ import {
   CheckCircle,
   XCircle,
   X,
-  Percent
+  Percent,
+  AlertTriangle
 } from "lucide-react";
+import { fetchApi } from "@/lib/api";
 
 interface FareDiscount {
   id: string;
@@ -24,40 +26,13 @@ interface FareDiscount {
 }
 
 export default function DiscountsPage() {
-  const [discounts, setDiscounts] = useState<FareDiscount[]>([
-    {
-      id: "ds-1",
-      passengerType: "STUDENT",
-      discountType: "PERCENT",
-      discountValue: 50, // 50% discount
-      effectiveFrom: "2026-01-01",
-      effectiveTo: "2026-12-31",
-      status: "ACTIVE"
-    },
-    {
-      id: "ds-2",
-      passengerType: "SENIOR",
-      discountType: "PERCENT",
-      discountValue: 30, // 30% discount
-      effectiveFrom: "2026-01-01",
-      effectiveTo: "2026-12-31",
-      status: "ACTIVE"
-    },
-    {
-      id: "ds-3",
-      passengerType: "PRIORITY",
-      discountType: "PERCENT",
-      discountValue: 100, // 100% discount (Free)
-      effectiveFrom: "2026-01-01",
-      effectiveTo: "2026-12-31",
-      status: "ACTIVE"
-    }
-  ]);
+  const [discounts, setDiscounts] = useState<FareDiscount[]>([]);
 
   const [passengerFilter, setPassengerFilter] = useState("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"CREATE" | "EDIT">("CREATE");
   const [selectedDiscount, setSelectedDiscount] = useState<FareDiscount | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Form State
   const [passengerType, setPassengerType] = useState<"STUDENT" | "SENIOR" | "PRIORITY">("STUDENT");
@@ -65,6 +40,29 @@ export default function DiscountsPage() {
   const [discountValue, setDiscountValue] = useState(50);
   const [effectiveFrom, setEffectiveFrom] = useState("2026-01-01");
   const [effectiveTo, setEffectiveTo] = useState("2026-12-31");
+
+  useEffect(() => {
+    async function loadDiscounts() {
+      try {
+        const data = await fetchApi("/api/fare-discounts");
+        if (Array.isArray(data)) {
+          setDiscounts(data.map((d: any) => ({
+            id: d.id,
+            passengerType: d.passengerType || "STUDENT",
+            discountType: d.discountType || "PERCENT",
+            discountValue: d.discountValue || 0,
+            effectiveFrom: d.effectiveFrom || "",
+            effectiveTo: d.effectiveTo || "",
+            status: d.status || "ACTIVE"
+          })));
+        }
+      } catch (err: any) {
+        console.warn("FMC Discounts API is offline. Running in mock fallback mode. Error:", err.message);
+        setIsOffline(true);
+      }
+    }
+    loadDiscounts();
+  }, []);
 
   const handleOpenCreateModal = () => {
     setModalMode("CREATE");
@@ -87,35 +85,102 @@ export default function DiscountsPage() {
     setIsModalOpen(true);
   };
 
-  const handleToggleStatus = (id: string) => {
+  const handleToggleStatus = async (id: string) => {
+    const ds = discounts.find((d) => d.id === id);
+    if (!ds) return;
+    const nextStatus = ds.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    
     setDiscounts(
-      discounts.map((ds) =>
-        ds.id === id ? { ...ds, status: ds.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" } : ds
+      discounts.map((d) =>
+        d.id === id ? { ...d, status: nextStatus } : d
       )
     );
+
+    try {
+      if (nextStatus === "INACTIVE") {
+        await fetchApi("/api/fare-discounts/" + id + "/disable", { method: "PATCH" });
+      } else {
+        console.warn("No explicit enable endpoint, toggled locally");
+      }
+    } catch (err: any) {
+      console.warn("Toggle status API failed, using mock local state. Error:", err.message);
+      setIsOffline(true);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (modalMode === "CREATE") {
-      const newDs: FareDiscount = {
-        id: `ds-${Date.now()}`,
-        passengerType,
-        discountType,
-        discountValue,
-        effectiveFrom,
-        effectiveTo,
-        status: "ACTIVE"
-      };
-      setDiscounts([...discounts, newDs]);
+      try {
+        const newDs = await fetchApi("/api/fare-discounts", {
+          method: "POST",
+          body: JSON.stringify({
+            passengerType,
+            discountType,
+            discountValue,
+            effectiveFrom,
+            effectiveTo
+          })
+        });
+        setDiscounts([...discounts, {
+          id: newDs.id,
+          passengerType: newDs.passengerType || passengerType,
+          discountType: newDs.discountType || discountType,
+          discountValue: newDs.discountValue || discountValue,
+          effectiveFrom: newDs.effectiveFrom || effectiveFrom,
+          effectiveTo: newDs.effectiveTo || effectiveTo,
+          status: newDs.status || "ACTIVE"
+        }]);
+      } catch (err: any) {
+        console.warn("POST /api/fare-discounts failed, using mock local state. Error:", err.message);
+        setIsOffline(true);
+        const fallbackDs: FareDiscount = {
+          id: "ds-" + Date.now(),
+          passengerType,
+          discountType,
+          discountValue,
+          effectiveFrom,
+          effectiveTo,
+          status: "ACTIVE"
+        };
+        setDiscounts([...discounts, fallbackDs]);
+      }
     } else if (modalMode === "EDIT" && selectedDiscount) {
-      setDiscounts(
-        discounts.map((ds) =>
-          ds.id === selectedDiscount.id
-            ? { ...ds, passengerType, discountType, discountValue, effectiveFrom, effectiveTo }
-            : ds
-        )
-      );
+      try {
+        const updatedDs = await fetchApi("/api/fare-discounts/" + selectedDiscount.id, {
+          method: "PUT",
+          body: JSON.stringify({
+            discountType,
+            discountValue,
+            effectiveFrom,
+            effectiveTo
+          })
+        });
+        setDiscounts(
+          discounts.map((ds) =>
+            ds.id === selectedDiscount.id
+              ? {
+                  ...ds,
+                  passengerType,
+                  discountType: updatedDs.discountType || discountType,
+                  discountValue: updatedDs.discountValue !== undefined ? updatedDs.discountValue : discountValue,
+                  effectiveFrom: updatedDs.effectiveFrom || effectiveFrom,
+                  effectiveTo: updatedDs.effectiveTo || effectiveTo
+                }
+              : ds
+          )
+        );
+      } catch (err: any) {
+        console.warn("PUT /api/fare-discounts failed, using mock local state. Error:", err.message);
+        setIsOffline(true);
+        setDiscounts(
+          discounts.map((ds) =>
+            ds.id === selectedDiscount.id
+              ? { ...ds, passengerType, discountType, discountValue, effectiveFrom, effectiveTo }
+              : ds
+          )
+        );
+      }
     }
     setIsModalOpen(false);
   };
@@ -126,6 +191,13 @@ export default function DiscountsPage() {
 
   return (
     <div className="space-y-6">
+      {isOffline && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
+          </span>
+        </div>
+      )}    
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>

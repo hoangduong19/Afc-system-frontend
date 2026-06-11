@@ -20,8 +20,10 @@ import {
   X,
   FileSpreadsheet
 } from "lucide-react";
+import { fetchApi } from "@/lib/api";
 
 interface SettlementPeriod {
+  id?: string;
   period: string; // YYYY-MM
   expectedRevenue: number;
   actualRevenue: number;
@@ -53,38 +55,10 @@ interface ReconciliationLog {
 }
 
 export default function SettlementsPage() {
-  // Periods mock data
-  const [periods, setPeriods] = useState<SettlementPeriod[]>([
-    {
-      period: "2026-05",
-      expectedRevenue: 1850000000,
-      actualRevenue: 1848500000,
-      discrepancy: -1500000,
-      status: "OPEN",
-      lastReconciledAt: "2026-06-05 14:30",
-      reconciledBy: "Trần Văn B (Admin)"
-    },
-    {
-      period: "2026-04",
-      expectedRevenue: 1720000000,
-      actualRevenue: 1720000000,
-      discrepancy: 0,
-      status: "LOCKED",
-      lastReconciledAt: "2026-05-02 09:15",
-      reconciledBy: "Nguyễn Văn A (System)"
-    },
-    {
-      period: "2026-03",
-      expectedRevenue: 1680000000,
-      actualRevenue: 1679200000,
-      discrepancy: -800000,
-      status: "LOCKED",
-      lastReconciledAt: "2026-04-03 11:45",
-      reconciledBy: "Nguyễn Văn A (System)"
-    }
-  ]);
+  const [periods, setPeriods] = useState<SettlementPeriod[]>([]);
 
   const [selectedPeriod, setSelectedPeriod] = useState<string>("2026-05");
+  const [isOffline, setIsOffline] = useState(false);
 
   // Operator shares data mapped by period
   const [operatorShares, setOperatorShares] = useState<Record<string, OperatorShare[]>>({
@@ -157,44 +131,7 @@ export default function SettlementsPage() {
   });
 
   // Logs data
-  const [logs, setLogs] = useState<ReconciliationLog[]>([
-    {
-      id: "log-1",
-      timestamp: "2026-06-05 14:30",
-      period: "2026-05",
-      action: "Đối soát định kỳ",
-      status: "WARNING",
-      details: "Phát hiện chênh lệch -1,500,000 ₫ (25 lượt đi không có log ga đến trên tuyến Metro)",
-      performedBy: "Trần Văn B (Admin)"
-    },
-    {
-      id: "log-2",
-      timestamp: "2026-06-01 02:00",
-      period: "2026-05",
-      action: "Nạp log dữ liệu giao dịch tự động",
-      status: "SUCCESS",
-      details: "Đã nạp thành công 637,500 bản ghi giao dịch từ cả 2 nhà vận hành.",
-      performedBy: "Hệ thống tự động"
-    },
-    {
-      id: "log-3",
-      timestamp: "2026-05-02 09:15",
-      period: "2026-04",
-      action: "Khóa sổ quyết toán",
-      status: "SUCCESS",
-      details: "Kỳ quyết toán Tháng 04/2026 đã được phê duyệt và khóa dữ liệu.",
-      performedBy: "Lê Văn C (Kế toán trưởng)"
-    },
-    {
-      id: "log-4",
-      timestamp: "2026-05-01 22:30",
-      period: "2026-04",
-      action: "Đối soát tự động định kỳ",
-      status: "SUCCESS",
-      details: "Dữ liệu khớp 100% (604,500 lượt đi). Không phát hiện chênh lệch.",
-      performedBy: "Nguyễn Văn A (System)"
-    }
-  ]);
+  const [logs, setLogs] = useState<ReconciliationLog[]>([]);
 
   // Modal State
   const [isReconcileModalOpen, setIsReconcileModalOpen] = useState(false);
@@ -204,9 +141,83 @@ export default function SettlementsPage() {
   const [selectedUploadPeriod, setSelectedUploadPeriod] = useState("2026-06");
   const [dragActive, setDragActive] = useState(false);
 
+  // Load Settlements from API on mount
+  useEffect(() => {
+    async function loadSettlements() {
+      try {
+        const data = await fetchApi("/api/settlements");
+        if (Array.isArray(data)) {
+          const fetchedPeriods: SettlementPeriod[] = data.map((s: any) => ({
+            id: s.settlementId,
+            period: s.period,
+            expectedRevenue: s.totalExpected || 0,
+            actualRevenue: s.totalActual || 0,
+            discrepancy: s.diffAmount || 0,
+            status: (s.status === "CONFIRMED" || s.status === "LOCKED" ? "LOCKED" : "OPEN") as SettlementPeriod["status"],
+            lastReconciledAt: s.ranAt ? new Date(s.ranAt).toISOString().replace("T", " ").substring(0, 16) : "",
+            reconciledBy: s.ranBy || "Hệ thống"
+          }));
+
+          const sharesMap: Record<string, OperatorShare[]> = {};
+          data.forEach((s: any) => {
+            if (Array.isArray(s.companyShares)) {
+              sharesMap[s.period] = s.companyShares.map((cs: any) => ({
+                operatorCode: cs.operatorCode || "",
+                operatorName: cs.operatorCode === "HURC" ? "Công ty Đường sắt Đô thị Hà Nội" : "Tổng công ty Vận tải Hà Nội",
+                totalKm: cs.totalKm || 0,
+                totalTrips: cs.totalTrips || 0,
+                expectedShare: cs.expectedRevenue || 0,
+                actualShare: cs.shareAmount || 0,
+                roundingAdjustment: cs.roundingAdjustment || 0,
+                status: (s.status === "CONFIRMED" || s.status === "LOCKED" ? "CONFIRMED" : "PENDING") as OperatorShare["status"]
+              }));
+            }
+          });
+
+          setPeriods(fetchedPeriods);
+          setOperatorShares(sharesMap);
+          if (fetchedPeriods.length > 0) {
+            setSelectedPeriod(fetchedPeriods[0].period);
+          }
+        }
+      } catch (err: any) {
+        console.warn("FMC Settlements API is offline. Running in mock fallback mode. Error:", err.message);
+        setIsOffline(true);
+      }
+    }
+    loadSettlements();
+  }, []);
+
   // Stats calculation for active period
-  const activePeriodInfo = periods.find((p) => p.period === selectedPeriod) || periods[0];
+  const activePeriodInfo = periods.find((p) => p.period === selectedPeriod) || periods[0] || {
+    period: "N/A", expectedRevenue: 0, actualRevenue: 0, discrepancy: 0, status: "OPEN", lastReconciledAt: "", reconciledBy: ""
+  };
   const activeShares = operatorShares[selectedPeriod] || [];
+
+  // Load Reconciliation Logs when active period changes
+  useEffect(() => {
+    if (!activePeriodInfo || !activePeriodInfo.id || activePeriodInfo.id.startsWith("mock-")) return;
+    
+    async function loadLogs() {
+      try {
+        const logsData = await fetchApi("/api/settlements/" + activePeriodInfo.id + "/reconciliation-logs");
+        if (Array.isArray(logsData)) {
+          setLogs(logsData.map((log) => ({
+            id: log.id,
+            timestamp: log.loggedAt ? new Date(log.loggedAt).toISOString().replace("T", " ").substring(0, 16) : "",
+            period: selectedPeriod,
+            action: log.category || "Đối soát",
+            status: log.discrepancyAmount !== 0 ? "WARNING" : "SUCCESS",
+            details: log.note || ("Đối soát hoàn tất: chênh lệch " + log.discrepancyAmount + " trên " + log.tripCount + " lượt."),
+            performedBy: "Hệ thống tự động"
+          })));
+        }
+      } catch (err: any) {
+        console.warn("Failed to load logs for period, keeping current logs state. Error:", err.message);
+      }
+    }
+    loadLogs();
+  }, [selectedPeriod, activePeriodInfo?.id]);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -238,6 +249,103 @@ export default function SettlementsPage() {
     setUploadProgress(0);
   };
 
+  const startSettlementRun = async () => {
+    const [yearStr, monthStr] = selectedUploadPeriod.split("-");
+    const year = parseInt(yearStr);
+    const month = parseInt(monthStr);
+
+    const fallbackPeriod = {
+      id: 'mock-' + Date.now(),
+      period: selectedUploadPeriod,
+      expectedRevenue: 1950000000,
+      actualRevenue: 1947800000,
+      discrepancy: -2200000,
+      status: "OPEN" as const,
+      lastReconciledAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+      reconciledBy: "Trần Văn B (Admin)"
+    };
+
+    const fallbackShares = [
+      {
+        operatorCode: "HURC",
+        operatorName: "Công ty Đường sắt Đô thị Hà Nội",
+        totalKm: 151000,
+        totalTrips: 192000,
+        expectedShare: 1170000000,
+        actualShare: 1168500000,
+        roundingAdjustment: -1500000,
+        status: "PENDING" as const
+      },
+      {
+        operatorCode: "TRANSERCO",
+        operatorName: "Tổng công ty Vận tải Hà Nội",
+        totalKm: 335000,
+        totalTrips: 471000,
+        expectedShare: 780000000,
+        actualShare: 779300000,
+        roundingAdjustment: -700000,
+        status: "PENDING" as const
+      }
+    ];
+
+    try {
+      const s = await fetchApi("/api/settlements/run", {
+        method: "POST",
+        body: JSON.stringify({ year, month })
+      });
+
+      const newPeriod = {
+        id: s.settlementId,
+        period: s.period,
+        expectedRevenue: s.totalExpected || 0,
+        actualRevenue: s.totalActual || 0,
+        discrepancy: s.diffAmount || 0,
+        status: s.status === "CONFIRMED" || s.status === "LOCKED" ? "LOCKED" as const : "OPEN" as const,
+        lastReconciledAt: s.ranAt ? new Date(s.ranAt).toISOString().replace("T", " ").substring(0, 16) : "",
+        reconciledBy: s.ranBy || "Hệ thống"
+      };
+
+      const newShares = s.companyShares ? s.companyShares.map((cs: any) => ({
+        operatorCode: cs.operatorCode || "",
+        operatorName: cs.operatorCode === "HURC" ? "Công ty Đường sắt Đô thị Hà Nội" : "Tổng công ty Vận tải Hà Nội",
+        totalKm: cs.totalKm || 0,
+        totalTrips: cs.totalTrips || 0,
+        expectedShare: cs.expectedRevenue || 0,
+        actualShare: cs.shareAmount || 0,
+        roundingAdjustment: cs.roundingAdjustment || 0,
+        status: s.status === "CONFIRMED" || s.status === "LOCKED" ? "CONFIRMED" as const : "PENDING" as const
+      })) : [];
+
+      setPeriods(prev => [newPeriod, ...prev.filter(p => p.period !== selectedUploadPeriod)]);
+      setOperatorShares(prev => ({
+        ...prev,
+        [selectedUploadPeriod]: newShares
+      }));
+      setSelectedPeriod(selectedUploadPeriod);
+    } catch (err: any) {
+      console.warn("POST run settlement failed. Falling back to local state. Error:", err.message);
+      setIsOffline(true);
+      
+      setPeriods(prev => [fallbackPeriod, ...prev.filter(p => p.period !== selectedUploadPeriod)]);
+      setOperatorShares(prev => ({
+        ...prev,
+        [selectedUploadPeriod]: fallbackShares
+      }));
+      setSelectedPeriod(selectedUploadPeriod);
+
+      const newLog = {
+        id: 'log-' + Date.now(),
+        timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
+        period: selectedUploadPeriod,
+        action: "Đối soát định kỳ tải lên",
+        status: "WARNING" as const,
+        details: "Phát hiện chênh lệch -2,200,000 ₫ khi đối soát thủ công dữ liệu giao dịch tháng " + selectedUploadPeriod + ".",
+        performedBy: "Trần Văn B (Admin)"
+      };
+      setLogs(prev => [newLog, ...prev]);
+    }
+  };
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isUploading) {
@@ -246,64 +354,9 @@ export default function SettlementsPage() {
           if (prev >= 100) {
             clearInterval(interval);
             setTimeout(() => {
-              // Complete upload and add mock record or update
               setIsUploading(false);
               setIsReconcileModalOpen(false);
-              
-              // If we are reconciliated a new month (e.g. 2026-06)
-              if (!periods.some(p => p.period === selectedUploadPeriod)) {
-                const newPeriod: SettlementPeriod = {
-                  period: selectedUploadPeriod,
-                  expectedRevenue: 1950000000,
-                  actualRevenue: 1947800000,
-                  discrepancy: -2200000,
-                  status: "OPEN",
-                  lastReconciledAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-                  reconciledBy: "Trần Văn B (Admin)"
-                };
-
-                const newShares: OperatorShare[] = [
-                  {
-                    operatorCode: "HURC",
-                    operatorName: "Công ty Đường sắt Đô thị Hà Nội",
-                    totalKm: 151000,
-                    totalTrips: 192000,
-                    expectedShare: 1170000000,
-                    actualShare: 1168500000,
-                    roundingAdjustment: -1500000,
-                    status: "PENDING"
-                  },
-                  {
-                    operatorCode: "TRANSERCO",
-                    operatorName: "Tổng công ty Vận tải Hà Nội",
-                    totalKm: 335000,
-                    totalTrips: 471000,
-                    expectedShare: 780000000,
-                    actualShare: 779300000,
-                    roundingAdjustment: -700000,
-                    status: "PENDING"
-                  }
-                ];
-
-                setPeriods([newPeriod, ...periods]);
-                setOperatorShares({
-                  ...operatorShares,
-                  [selectedUploadPeriod]: newShares
-                });
-                setSelectedPeriod(selectedUploadPeriod);
-
-                // Add log
-                const newLog: ReconciliationLog = {
-                  id: `log-${Date.now()}`,
-                  timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
-                  period: selectedUploadPeriod,
-                  action: "Đối soát định kỳ tải lên",
-                  status: "WARNING",
-                  details: `Phát hiện chênh lệch -2,200,000 ₫ khi đối soát thủ công dữ liệu giao dịch tháng ${selectedUploadPeriod}.`,
-                  performedBy: "Trần Văn B (Admin)"
-                };
-                setLogs([newLog, ...logs]);
-              }
+              startSettlementRun();
             }, 500);
             return 100;
           }
@@ -312,37 +365,44 @@ export default function SettlementsPage() {
       }, 200);
     }
     return () => clearInterval(interval);
-  }, [isUploading]);
+  }, [isUploading, selectedUploadPeriod, periods, operatorShares, logs]);
 
-  const handleLockPeriod = () => {
-    setPeriods(
-      periods.map((p) =>
-        p.period === selectedPeriod ? { ...p, status: "LOCKED" } : p
-      )
-    );
-    
-    // Update active shares status
-    if (operatorShares[selectedPeriod]) {
-      setOperatorShares({
-        ...operatorShares,
-        [selectedPeriod]: operatorShares[selectedPeriod].map((s) => ({
-          ...s,
-          status: "CONFIRMED"
-        }))
-      });
-    }
+  const handleLockPeriod = async () => {
+    if (!activePeriodInfo || !activePeriodInfo.id) return;
 
-    // Add log
-    const newLog: ReconciliationLog = {
-      id: `log-${Date.now()}`,
-      timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
-      period: selectedPeriod,
-      action: "Khóa sổ quyết toán",
-      status: "SUCCESS",
-      details: `Đã khóa dữ liệu và xác nhận bảng phân chia doanh thu kỳ Tháng ${selectedPeriod.substring(5)}/${selectedPeriod.substring(0, 4)}.`,
-      performedBy: "Trần Văn B (Admin)"
+    const updater = () => {
+      setPeriods(prev =>
+        prev.map((p) => (p.period === selectedPeriod ? { ...p, status: "LOCKED" } : p))
+      );
+      if (operatorShares[selectedPeriod]) {
+        setOperatorShares(prev => ({
+          ...prev,
+          [selectedPeriod]: prev[selectedPeriod].map((s) => ({ ...s, status: "CONFIRMED" }))
+        }));
+      }
     };
-    setLogs([newLog, ...logs]);
+
+    try {
+      if (!activePeriodInfo.id.startsWith("mock-")) {
+        await fetchApi("/api/settlements/" + activePeriodInfo.id + "/confirm", { method: "PATCH" });
+      }
+      updater();
+
+      const newLog = {
+        id: 'log-' + Date.now(),
+        timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
+        period: selectedPeriod,
+        action: "Khóa sổ quyết toán",
+        status: "SUCCESS" as const,
+        details: "Đã khóa dữ liệu và xác nhận bảng phân chia doanh thu kỳ Tháng " + selectedPeriod.substring(5) + "/" + selectedPeriod.substring(0, 4) + ".",
+        performedBy: "Trần Văn B (Admin)"
+      };
+      setLogs(prev => [newLog, ...prev]);
+    } catch (err: any) {
+      console.warn("Confirm settlement failed, using local mock. Error:", err.message);
+      setIsOffline(true);
+      updater();
+    }
     setIsConfirmLockOpen(false);
   };
 
@@ -363,14 +423,13 @@ export default function SettlementsPage() {
       });
     }
 
-    // Add log
-    const newLog: ReconciliationLog = {
-      id: `log-${Date.now()}`,
+    const newLog = {
+      id: 'log-' + Date.now(),
       timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
       period: periodStr,
       action: "Mở khóa sổ quyết toán",
-      status: "WARNING",
-      details: `Kỳ quyết toán Tháng ${periodStr.substring(5)}/${periodStr.substring(0, 4)} đã được mở khóa để đối soát lại dữ liệu.`,
+      status: "WARNING" as const,
+      details: "Kỳ quyết toán Tháng " + periodStr.substring(5) + "/" + periodStr.substring(0, 4) + " đã được mở khóa để đối soát lại dữ liệu.",
       performedBy: "Trần Văn B (Admin)"
     };
     setLogs([newLog, ...logs]);
@@ -385,14 +444,13 @@ export default function SettlementsPage() {
         )
       });
 
-      // Add log
-      const newLog: ReconciliationLog = {
-        id: `log-${Date.now()}`,
+      const newLog = {
+        id: 'log-' + Date.now(),
         timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
         period: selectedPeriod,
         action: "Thanh toán phân chia",
-        status: "SUCCESS",
-        details: `Đã cập nhật trạng thái đã thanh toán cho nhà vận hành ${operatorCode} trong kỳ quyết toán ${selectedPeriod}.`,
+        status: "SUCCESS" as const,
+        details: "Đã cập nhật trạng thái đã thanh toán cho nhà vận hành " + operatorCode + " trong kỳ quyết toán " + selectedPeriod + ".",
         performedBy: "Trần Văn B (Admin)"
       };
       setLogs([newLog, ...logs]);
@@ -401,6 +459,14 @@ export default function SettlementsPage() {
 
   return (
     <div className="space-y-6">
+      {isOffline && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
+          </span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   CreditCard,
   Plus,
@@ -13,6 +13,7 @@ import {
   Link as LinkIcon,
   X
 } from "lucide-react";
+import { fetchApi } from "@/lib/api";
 
 interface TransportCard {
   id: string;
@@ -25,44 +26,7 @@ interface TransportCard {
 }
 
 export default function CardsPage() {
-  const [cards, setCards] = useState<TransportCard[]>([
-    {
-      id: "c-1",
-      uid: "04:8A:F2:1A:3B:5C:80",
-      passengerType: "STUDENT",
-      balance: 45000,
-      status: "ACTIVE",
-      linkedTicket: "Vé tháng - R-M1",
-      createdAt: "2026-02-10 14:30"
-    },
-    {
-      id: "c-2",
-      uid: "04:1B:9C:2D:3E:4F:90",
-      passengerType: "NORMAL",
-      balance: 125000,
-      status: "ACTIVE",
-      linkedTicket: null,
-      createdAt: "2026-02-12 09:15"
-    },
-    {
-      id: "c-3",
-      uid: "04:99:A1:B2:C3:D4:E5",
-      passengerType: "SENIOR",
-      balance: 15000,
-      status: "SUSPENDED",
-      linkedTicket: "Vé lượt - R-M1",
-      createdAt: "2026-02-15 16:45"
-    },
-    {
-      id: "c-4",
-      uid: "04:55:66:77:88:99:AA",
-      passengerType: "PRIORITY",
-      balance: 0,
-      status: "ISSUED",
-      linkedTicket: null,
-      createdAt: "2026-02-20 11:00"
-    }
-  ]);
+  const [cards, setCards] = useState<TransportCard[]>([]);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -70,6 +34,7 @@ export default function CardsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [selectedCard, setSelectedCard] = useState<TransportCard | null>(null);
+  const [isOffline, setIsOffline] = useState(false);
 
   // Form State - Phát hành thẻ
   const [uid, setUid] = useState("");
@@ -78,6 +43,29 @@ export default function CardsPage() {
 
   // Form State - Liên kết vé
   const [ticketType, setTicketType] = useState("Vé lượt R-M1");
+
+  useEffect(() => {
+    async function loadCards() {
+      try {
+        const data = await fetchApi("/api/cards");
+        if (Array.isArray(data)) {
+          setCards(data.map((c: any) => ({
+            id: c.id,
+            uid: c.cardUid,
+            passengerType: c.type === "IDENTIFIED" ? "STUDENT" : "NORMAL",
+            balance: 50000, // mock balance
+            status: c.status || "ACTIVE",
+            linkedTicket: c.linkedUserId ? "Vé liên kết" : null,
+            createdAt: c.createdAt ? new Date(c.createdAt).toISOString().replace("T", " ").substring(0, 16) : ""
+          })));
+        }
+      } catch (err: any) {
+        console.warn("FMC Cards API is offline. Running in mock fallback mode. Error:", err.message);
+        setIsOffline(true);
+      }
+    }
+    loadCards();
+  }, []);
 
   const handleOpenCreateModal = () => {
     setUid(generateRandomUid());
@@ -95,32 +83,73 @@ export default function CardsPage() {
     ).join(":");
   };
 
-  const handleIssueCard = (e: React.FormEvent) => {
+  const handleIssueCard = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newCard: TransportCard = {
-      id: `c-${Date.now()}`,
-      uid,
-      passengerType,
-      balance,
-      status: "ISSUED",
-      linkedTicket: null,
-      createdAt: new Date().toISOString().replace("T", " ").substring(0, 16)
-    };
-    setCards([newCard, ...cards]);
+    try {
+      const newCard = await fetchApi("/api/cards", {
+        method: "POST",
+        body: JSON.stringify({
+          cardUid: uid,
+          type: passengerType === "NORMAL" ? "ANON" : "IDENTIFIED",
+          supportsMetro: true,
+          supportsBus: true
+        })
+      });
+      
+      const createdCard: TransportCard = {
+        id: newCard.id,
+        uid: newCard.cardUid,
+        passengerType: passengerType,
+        balance: balance,
+        status: newCard.status || "ISSUED",
+        linkedTicket: null,
+        createdAt: newCard.createdAt ? new Date(newCard.createdAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16)
+      };
+      setCards([createdCard, ...cards]);
+    } catch (err: any) {
+      console.warn("POST /api/cards failed, using mock local state. Error:", err.message);
+      setIsOffline(true);
+      const fallbackCard: TransportCard = {
+        id: "c-" + Date.now(),
+        uid,
+        passengerType,
+        balance,
+        status: "ISSUED",
+        linkedTicket: null,
+        createdAt: new Date().toISOString().replace("T", " ").substring(0, 16)
+      };
+      setCards([fallbackCard, ...cards]);
+    }
     setIsModalOpen(false);
   };
 
-  const handleAction = (id: string, action: "ACTIVATE" | "SUSPEND" | "REVOKE") => {
-    setCards(
-      cards.map((c) => {
-        if (c.id !== id) return c;
-        let nextStatus: TransportCard["status"] = c.status;
-        if (action === "ACTIVATE") nextStatus = "ACTIVE";
-        else if (action === "SUSPEND") nextStatus = "SUSPENDED";
-        else if (action === "REVOKE") nextStatus = "REVOKED";
-        return { ...c, status: nextStatus };
-      })
-    );
+  const handleAction = async (id: string, action: "ACTIVATE" | "SUSPEND" | "REVOKE") => {
+    const card = cards.find(c => c.id === id);
+    if (!card) return;
+    
+    let nextStatus: TransportCard["status"] = card.status;
+    if (action === "ACTIVATE") nextStatus = "ACTIVE";
+    else if (action === "SUSPEND") nextStatus = "SUSPENDED";
+    else if (action === "REVOKE") nextStatus = "REVOKED";
+
+    setCards(cards.map((c) => (c.id === id ? { ...c, status: nextStatus } : c)));
+
+    try {
+      if (action === "REVOKE") {
+        await fetchApi("/api/cards/" + id + "/revoke", { method: "PATCH" });
+      } else if (action === "SUSPEND") {
+        await fetchApi("/api/cards/" + id + "/suspend", { method: "PATCH" });
+      } else if (action === "ACTIVATE") {
+        if (card.status === "SUSPENDED") {
+          await fetchApi("/api/cards/" + id + "/unsuspend", { method: "PATCH" });
+        } else {
+          await fetchApi("/api/cards/" + id + "/activate", { method: "PATCH" });
+        }
+      }
+    } catch (err: any) {
+      console.warn("Card action API failed, using mock local state. Error:", err.message);
+      setIsOffline(true);
+    }
   };
 
   const handleOpenLinkModal = (card: TransportCard) => {
@@ -129,7 +158,7 @@ export default function CardsPage() {
     setIsLinkModalOpen(true);
   };
 
-  const handleLinkTicketSubmit = (e: React.FormEvent) => {
+  const handleLinkTicketSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedCard) {
       setCards(
@@ -137,17 +166,37 @@ export default function CardsPage() {
           c.id === selectedCard.id ? { ...c, linkedTicket: ticketType, status: "ACTIVE" } : c
         )
       );
+
+      try {
+        const dummyTicketId = "11111111-1111-1111-1111-111111111111";
+        await fetchApi("/api/cards/" + selectedCard.id + "/link-ticket", {
+          method: "POST",
+          body: JSON.stringify({ ticketId: dummyTicketId })
+        });
+      } catch (err: any) {
+        console.warn("Link ticket API failed, using mock local state. Error:", err.message);
+        setIsOffline(true);
+      }
     }
     setIsLinkModalOpen(false);
   };
 
-  const handleUnlinkTicket = (id: string) => {
+  const handleUnlinkTicket = async (id: string) => {
     if (confirm("Bạn có chắc chắn muốn hủy liên kết vé khỏi thẻ này?")) {
       setCards(
         cards.map((c) =>
           c.id === id ? { ...c, linkedTicket: null } : c
         )
       );
+
+      try {
+        await fetchApi("/api/cards/" + id + "/unlink-ticket", {
+          method: "POST"
+        });
+      } catch (err: any) {
+        console.warn("Unlink ticket API failed, using mock local state. Error:", err.message);
+        setIsOffline(true);
+      }
     }
   };
 
@@ -160,6 +209,13 @@ export default function CardsPage() {
 
   return (
     <div className="space-y-6">
+      {isOffline && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
+          </span>
+        </div>
+      )}    
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>

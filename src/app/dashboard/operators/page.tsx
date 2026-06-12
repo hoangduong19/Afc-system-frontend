@@ -35,6 +35,19 @@ export default function OperatorsPage() {
   const [modalError, setModalError] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
 
+  // Confirm Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    operatorId: string;
+    operatorName: string;
+    newStatus: "ACTIVE" | "INACTIVE";
+  }>({
+    isOpen: false,
+    operatorId: "",
+    operatorName: "",
+    newStatus: "ACTIVE"
+  });
+
   // Form State
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
@@ -81,30 +94,42 @@ export default function OperatorsPage() {
     setIsModalOpen(true);
   };
 
-  const handleToggleStatus = async (id: string) => {
+  const handleToggleStatus = (id: string) => {
     const operatorToToggle = operators.find(o => o.id === id);
     if (!operatorToToggle) return;
 
     const newStatus = operatorToToggle.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    setConfirmModal({
+      isOpen: true,
+      operatorId: id,
+      operatorName: operatorToToggle.name,
+      newStatus: newStatus
+    });
+  };
+
+  const handleConfirmToggle = async () => {
+    const { operatorId, operatorName, newStatus } = confirmModal;
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+
     const originalList = [...operators];
     setOperators(
       operators.map((op) =>
-        op.id === id ? { ...op, status: newStatus } : op
+        op.id === operatorId ? { ...op, status: newStatus } : op
       )
     );
     setPageError(null);
 
     try {
       if (newStatus === "INACTIVE") {
-        await fetchApi(`/api/operators/${id}/deactivate`, { method: "PATCH" });
+        await fetchApi(`/api/operators/${operatorId}/deactivate`, { method: "PATCH" });
       } else if (newStatus === "ACTIVE") {
-        await fetchApi(`/api/operators/${id}/activate`, { method: "PATCH" });
+        await fetchApi(`/api/operators/${operatorId}/activate`, { method: "PATCH" });
       }
     } catch (err: any) {
       console.warn("Backend toggle operator status failed. Error:", err.message);
       setOperators(originalList);
       setIsOffline(true);
-      setPageError(`Lỗi hệ thống: ${err.message || "Không thể thay đổi trạng thái nhà vận hành."}`);
+      setPageError(`Lỗi hệ thống: ${err.message || "Không thể thay đổi trạng thái nhà vận hành " + operatorName}`);
     }
   };
 
@@ -448,6 +473,47 @@ export default function OperatorsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+          />
+          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl w-full max-w-md p-6 z-10">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="p-2 bg-warning/10 rounded-full text-warning mt-0.5">
+                <AlertTriangle className="h-6 w-6 text-secondary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-on-surface">Xác nhận thay đổi trạng thái</h3>
+                <p className="text-sm text-on-surface-variant mt-1">
+                  Bạn có chắc chắn muốn chuyển trạng thái nhà vận hành <strong>{confirmModal.operatorName}</strong> sang{" "}
+                  <strong>{confirmModal.newStatus === "ACTIVE" ? "HOẠT ĐỘNG" : "TẠM KHÓA"}</strong> không?
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 border border-outline-variant rounded text-on-surface-variant hover:bg-surface-container-high transition-colors text-xs font-semibold uppercase cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmToggle}
+                className="px-4 py-2 bg-secondary text-on-secondary rounded hover:bg-secondary-container transition-colors text-xs font-semibold uppercase cursor-pointer"
+              >
+                Xác nhận
+              </button>
+            </div>
           </div>
         </div>
       )}

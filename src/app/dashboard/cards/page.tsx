@@ -37,6 +37,28 @@ export default function CardsPage() {
   const [isOffline, setIsOffline] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+
+  // Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    cardId: string;
+    cardUid: string;
+    action: "ACTIVATE" | "SUSPEND" | "REVOKE" | "UNLINK_TICKET";
+    title: string;
+    description: string;
+    requireReason: boolean;
+    reason: string;
+  }>({
+    isOpen: false,
+    cardId: "",
+    cardUid: "",
+    action: "ACTIVATE",
+    title: "",
+    description: "",
+    requireReason: false,
+    reason: ""
+  });
 
   // Form State - Phát hành thẻ
   const [uid, setUid] = useState("");
@@ -118,36 +140,115 @@ export default function CardsPage() {
     }
   };
 
-  const handleAction = async (id: string, action: "ACTIVATE" | "SUSPEND" | "REVOKE") => {
-    const card = cards.find(c => c.id === id);
+  const triggerConfirm = (cardId: string, cardUid: string, action: "ACTIVATE" | "SUSPEND" | "REVOKE" | "UNLINK_TICKET") => {
+    const card = cards.find(c => c.id === cardId);
     if (!card) return;
-    
+
+    let title = "";
+    let description = "";
+    let requireReason = false;
+
+    if (action === "SUSPEND") {
+      title = "Xác nhận Khóa Tạm Thời Thẻ";
+      description = `Bạn có chắc chắn muốn khóa tạm thời thẻ ${cardUid} không?`;
+      requireReason = true;
+    } else if (action === "REVOKE") {
+      title = "Xác nhận Hủy Thẻ Vĩnh Viễn";
+      description = `Bạn có chắc chắn muốn hủy thẻ ${cardUid} vĩnh viễn không? Hành động này không thể hoàn tác.`;
+      requireReason = true;
+    } else if (action === "ACTIVATE") {
+      if (card.status === "SUSPENDED") {
+        title = "Xác nhận Mở Khóa Thẻ (Unsuspend)";
+        description = `Bạn có chắc chắn muốn mở khóa thẻ ${cardUid} đang bị tạm dừng không?`;
+        requireReason = true;
+      } else {
+        title = "Xác nhận Kích Hoạt Thẻ (Activate)";
+        description = `Bạn có chắc chắn muốn kích hoạt thẻ ${cardUid} không?`;
+        requireReason = false;
+      }
+    } else if (action === "UNLINK_TICKET") {
+      title = "Xác nhận Hủy Liên Kết Vé";
+      description = `Bạn có chắc chắn muốn hủy liên kết vé khỏi thẻ ${cardUid} không?`;
+      requireReason = false;
+    }
+
+    setConfirmError(null);
+    setConfirmModal({
+      isOpen: true,
+      cardId,
+      cardUid,
+      action,
+      title,
+      description,
+      requireReason,
+      reason: ""
+    });
+  };
+
+  const handleConfirmAction = async () => {
+    const { cardId, cardUid, action, reason, requireReason } = confirmModal;
+
+    if (requireReason && !reason.trim()) {
+      setConfirmError("Lý do thực hiện hành động là bắt buộc và không được để trống.");
+      return;
+    }
+
+    setConfirmError(null);
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+
+    if (action === "UNLINK_TICKET") {
+      const originalList = [...cards];
+      setCards(cards.map((c) => c.id === cardId ? { ...c, linkedTicket: null } : c));
+      setPageError(null);
+      try {
+        await fetchApi("/api/cards/" + cardId + "/unlink-ticket", { method: "DELETE" });
+      } catch (err: any) {
+        console.warn("Unlink ticket failed:", err.message);
+        setIsOffline(true);
+        setCards(originalList);
+        setPageError(`Thao tác thất bại: ${err.message || "Không thể hủy liên kết vé khỏi thẻ " + cardUid}`);
+      }
+      return;
+    }
+
+    const card = cards.find(c => c.id === cardId);
+    if (!card) return;
+
     let nextStatus: TransportCard["status"] = card.status;
     if (action === "ACTIVATE") nextStatus = "ACTIVE";
     else if (action === "SUSPEND") nextStatus = "SUSPENDED";
     else if (action === "REVOKE") nextStatus = "REVOKED";
 
     const originalList = [...cards];
-    setCards(cards.map((c) => (c.id === id ? { ...c, status: nextStatus } : c)));
+    setCards(cards.map((c) => (c.id === cardId ? { ...c, status: nextStatus } : c)));
     setPageError(null);
 
     try {
       if (action === "REVOKE") {
-        await fetchApi("/api/cards/" + id + "/revoke", { method: "PATCH" });
+        await fetchApi("/api/cards/" + cardId + "/revoke", {
+          method: "PATCH",
+          body: JSON.stringify({ reason: reason.trim() })
+        });
       } else if (action === "SUSPEND") {
-        await fetchApi("/api/cards/" + id + "/suspend", { method: "PATCH" });
+        await fetchApi("/api/cards/" + cardId + "/suspend", {
+          method: "PATCH",
+          body: JSON.stringify({ reason: reason.trim() })
+        });
       } else if (action === "ACTIVATE") {
         if (card.status === "SUSPENDED") {
-          await fetchApi("/api/cards/" + id + "/unsuspend", { method: "PATCH" });
+          await fetchApi("/api/cards/" + cardId + "/unsuspend", {
+            method: "PATCH",
+            body: JSON.stringify({ reason: reason.trim() })
+          });
         } else {
-          await fetchApi("/api/cards/" + id + "/activate", { method: "PATCH" });
+          await fetchApi("/api/cards/" + cardId + "/activate", { method: "PATCH" });
         }
       }
     } catch (err: any) {
       console.warn("Card action API failed. Error:", err.message);
       setIsOffline(true);
       setCards(originalList);
-      setPageError("Lỗi kết nối tới Backend API. Không thể thực hiện thay đổi trạng thái thẻ " + card.uid + ".");
+      setPageError(`Thao tác thất bại: ${err.message || "Không thể thay đổi trạng thái thẻ " + cardUid}`);
     }
   };
 
@@ -182,31 +283,6 @@ export default function CardsPage() {
       }
     }
     setIsLinkModalOpen(false);
-  };
-
-  const handleUnlinkTicket = async (id: string) => {
-    const card = cards.find(c => c.id === id);
-    const cardUid = card ? card.uid : "";
-    if (confirm("Bạn có chắc chắn muốn hủy liên kết vé khỏi thẻ này?")) {
-      const originalList = [...cards];
-      setCards(
-        cards.map((c) =>
-          c.id === id ? { ...c, linkedTicket: null } : c
-        )
-      );
-      setPageError(null);
-
-      try {
-        await fetchApi("/api/cards/" + id + "/unlink-ticket", {
-          method: "POST"
-        });
-      } catch (err: any) {
-        console.warn("Unlink ticket API failed. Error:", err.message);
-        setIsOffline(true);
-        setCards(originalList);
-        setPageError("Lỗi kết nối tới Backend API. Không thể hủy liên kết vé khỏi thẻ " + cardUid + ".");
-      }
-    }
   };
 
   const filteredCards = cards.filter((c) => {
@@ -380,7 +456,7 @@ export default function CardsPage() {
                         <span className="inline-flex items-center gap-1.5 text-secondary-fixed-dim">
                           <CheckCircle className="h-3.5 w-3.5 text-tertiary-fixed-dim" /> {card.linkedTicket}
                           <button
-                            onClick={() => handleUnlinkTicket(card.id)}
+                            onClick={() => triggerConfirm(card.id, card.uid, "UNLINK_TICKET")}
                             className="text-error hover:underline text-[10px] uppercase font-semibold ml-1 cursor-pointer"
                             title="Hủy liên kết vé"
                           >
@@ -431,7 +507,7 @@ export default function CardsPage() {
                       <div className="inline-flex gap-2">
                         {card.status === "ISSUED" && (
                           <button
-                            onClick={() => handleAction(card.id, "ACTIVATE")}
+                            onClick={() => triggerConfirm(card.id, card.uid, "ACTIVATE")}
                             className="px-2 py-0.5 bg-tertiary-fixed-dim/20 hover:bg-tertiary-fixed-dim/30 text-on-tertiary-fixed-variant rounded text-[10px] font-semibold uppercase cursor-pointer"
                           >
                             Kích hoạt
@@ -439,7 +515,7 @@ export default function CardsPage() {
                         )}
                         {card.status === "ACTIVE" && (
                           <button
-                            onClick={() => handleAction(card.id, "SUSPEND")}
+                            onClick={() => triggerConfirm(card.id, card.uid, "SUSPEND")}
                             className="px-2 py-0.5 bg-secondary-fixed-dim/20 hover:bg-secondary-fixed-dim/30 text-on-secondary-fixed-variant rounded text-[10px] font-semibold uppercase cursor-pointer"
                           >
                             Khóa tạm thời
@@ -447,7 +523,7 @@ export default function CardsPage() {
                         )}
                         {card.status === "SUSPENDED" && (
                           <button
-                            onClick={() => handleAction(card.id, "ACTIVATE")}
+                            onClick={() => triggerConfirm(card.id, card.uid, "ACTIVATE")}
                             className="px-2 py-0.5 bg-tertiary-fixed-dim/20 hover:bg-tertiary-fixed-dim/30 text-on-tertiary-fixed-variant rounded text-[10px] font-semibold uppercase cursor-pointer"
                           >
                             Mở khóa
@@ -455,7 +531,7 @@ export default function CardsPage() {
                         )}
                         {card.status !== "REVOKED" && (
                           <button
-                            onClick={() => handleAction(card.id, "REVOKE")}
+                            onClick={() => triggerConfirm(card.id, card.uid, "REVOKE")}
                             className="px-2 py-0.5 bg-error-container hover:bg-error-container/80 text-on-error-container rounded text-[10px] font-semibold uppercase cursor-pointer"
                           >
                             Hủy thẻ
@@ -631,6 +707,69 @@ export default function CardsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal - Hộp thoại Xác nhận và Nhập lý do tùy chỉnh */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+          />
+          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl w-full max-w-md p-6 z-10">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="p-2 bg-warning/10 rounded-full text-warning mt-0.5">
+                <AlertTriangle className="h-6 w-6 text-secondary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-on-surface">{confirmModal.title}</h3>
+                <p className="text-sm text-on-surface-variant mt-1">{confirmModal.description}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {confirmModal.requireReason && (
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                    Nhập lý do thực hiện (Bắt buộc)
+                  </label>
+                  <textarea
+                    required
+                    rows={3}
+                    placeholder="Vui lòng điền lý do..."
+                    value={confirmModal.reason}
+                    onChange={(e) => setConfirmModal(prev => ({ ...prev, reason: e.target.value }))}
+                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm resize-none"
+                  />
+                </div>
+              )}
+
+              {confirmError && (
+                <div className="px-3 py-2 bg-error-container text-on-error-container text-xs rounded-lg flex items-center gap-2 border border-error/20">
+                  <AlertTriangle className="h-4 w-4 text-error shrink-0" />
+                  <span>{confirmError}</span>
+                </div>
+              )}
+
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                  className="px-4 py-2 border border-outline-variant rounded text-on-surface-variant hover:bg-surface-container-high transition-colors text-xs font-semibold uppercase cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmAction}
+                  className="px-4 py-2 bg-secondary text-on-secondary rounded hover:bg-secondary-container transition-colors text-xs font-semibold uppercase cursor-pointer"
+                >
+                  Xác nhận
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

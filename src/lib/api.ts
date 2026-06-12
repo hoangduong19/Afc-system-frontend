@@ -38,7 +38,7 @@ async function refreshAccessToken(): Promise<string | null> {
   if (!refreshToken) return null;
 
   try {
-    const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+    const response = await fetch(`${API_BASE_URL}/api/auth/refresh-token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
@@ -156,7 +156,7 @@ export async function fetchApi<T = any>(
   // If 401 and we haven't already tried refreshing, attempt token refresh
   if (response.status === 401 && !_skipRefresh && typeof window !== "undefined") {
     const token = localStorage.getItem(TOKEN_KEY);
-    
+
     // Only attempt refresh if we had a real token (not mock or missing)
     if (token && token !== "mock-token-bypass") {
       // Deduplicate: if a refresh is already in progress, wait for it

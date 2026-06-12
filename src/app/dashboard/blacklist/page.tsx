@@ -17,7 +17,7 @@ import { fetchApi } from "@/lib/api";
 interface BlacklistedCard {
   id: string;
   cardUid: string;
-  reason: "DEBT" | "STOLEN" | "FRAUD";
+  reason: string;
   notes: string;
   blockedAt: string;
 }
@@ -32,10 +32,20 @@ export default function BlacklistPage() {
   const [modalError, setModalError] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
 
+  // Confirm Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    itemId: string;
+    cardUid: string;
+  }>({
+    isOpen: false,
+    itemId: "",
+    cardUid: ""
+  });
+
   // Form State
   const [cardUid, setCardUid] = useState("");
-  const [reason, setReason] = useState<"DEBT" | "STOLEN" | "FRAUD">("DEBT");
-  const [notes, setNotes] = useState("");
+  const [reason, setReason] = useState("");
 
   useEffect(() => {
     async function loadData() {
@@ -57,7 +67,7 @@ export default function BlacklistPage() {
             id: b.id,
             cardUid: b.cardUid || cardMap[b.cardId] || "Mã thẻ ẩn",
             reason: b.reason || "DEBT",
-            notes: b.reason === "DEBT" ? "Nợ cước chưa thanh toán" : b.reason === "STOLEN" ? "Báo mất thẻ vật lý" : "Gian lận / Phát hiện giả mạo",
+            notes: b.reason === "DEBT" ? "Nợ cước chưa thanh toán" : b.reason === "STOLEN" ? "Báo mất thẻ vật lý" : b.reason === "FRAUD" ? "Gian lận / Phát hiện giả mạo" : (b.reason || "N/A"),
             blockedAt: b.addedAt ? new Date(b.addedAt).toISOString().replace("T", " ").substring(0, 16) : ""
           })));
         }
@@ -71,8 +81,7 @@ export default function BlacklistPage() {
 
   const handleOpenModal = () => {
     setCardUid("");
-    setReason("DEBT");
-    setNotes("");
+    setReason("");
     setModalError(null);
     setIsModalOpen(true);
   };
@@ -97,15 +106,15 @@ export default function BlacklistPage() {
         method: "POST",
         body: JSON.stringify({
           cardId: resolvedCardId,
-          reason: reason
+          reason: reason.trim()
         })
       });
       
       setBlacklist([{
         id: res.id,
         cardUid: cardUid,
-        reason: reason,
-        notes: notes || (reason === "DEBT" ? "Nợ cước chưa thanh toán" : reason === "STOLEN" ? "Báo mất thẻ vật lý" : "Gian lận / Phát hiện giả mạo"),
+        reason: reason.trim(),
+        notes: reason.trim(),
         blockedAt: res.addedAt ? new Date(res.addedAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16)
       }, ...blacklist]);
       setIsModalOpen(false);
@@ -116,19 +125,28 @@ export default function BlacklistPage() {
     }
   };
 
-  const handleRemoveFromBlacklist = async (id: string, uid: string) => {
-    if (confirm("Bạn có chắc chắn muốn mở khóa và gỡ thẻ " + uid + " khỏi danh sách đen?")) {
-      const originalList = [...blacklist];
-      setBlacklist(blacklist.filter((item) => item.id !== id));
-      setPageError(null);
-      try {
-        await fetchApi("/api/blacklist/" + id, { method: "DELETE" });
-      } catch (err: any) {
-        console.warn("DELETE /api/blacklist failed. Error:", err.message);
-        setIsOffline(true);
-        setBlacklist(originalList);
-        setPageError("Lỗi kết nối tới Backend API. Không thể mở khóa thẻ " + uid + ".");
-      }
+  const handleRemoveFromBlacklist = (id: string, uid: string) => {
+    setConfirmModal({
+      isOpen: true,
+      itemId: id,
+      cardUid: uid
+    });
+  };
+
+  const handleConfirmRemove = async () => {
+    const { itemId, cardUid } = confirmModal;
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+
+    const originalList = [...blacklist];
+    setBlacklist(blacklist.filter((item) => item.id !== itemId));
+    setPageError(null);
+    try {
+      await fetchApi("/api/blacklist/" + itemId, { method: "DELETE" });
+    } catch (err: any) {
+      console.warn("DELETE /api/blacklist failed. Error:", err.message);
+      setIsOffline(true);
+      setBlacklist(originalList);
+      setPageError("Lỗi kết nối tới Backend API. Không thể mở khóa thẻ " + cardUid + ".");
     }
   };
 
@@ -278,15 +296,17 @@ export default function BlacklistPage() {
                     </td>
                     <td className="p-table-cell-padding">
                       <span
-                        className={`px-2.5 py-0.5 rounded font-label-caps text-[10px] font-bold inline-flex items-center gap-1 ${
+                        className={`px-2.5 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${
                           item.reason === "FRAUD"
                             ? "bg-error text-on-error"
                             : item.reason === "STOLEN"
                             ? "bg-secondary-fixed-dim/20 text-on-secondary-fixed-variant"
-                            : "bg-surface-variant text-on-surface-variant"
+                            : item.reason === "DEBT"
+                            ? "bg-surface-variant text-on-surface-variant"
+                            : "bg-error-container text-on-error-container"
                         }`}
                       >
-                        <AlertOctagon className="h-3 w-3" /> {item.reason}
+                        <AlertOctagon className="h-3 w-3" /> {item.reason === "FRAUD" || item.reason === "STOLEN" || item.reason === "DEBT" ? item.reason : "BLOCKED"}
                       </span>
                     </td>
                     <td className="p-table-cell-padding text-on-surface font-medium">
@@ -366,29 +386,14 @@ export default function BlacklistPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Lý do đưa vào danh sách đen
-                </label>
-                <select
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
-                >
-                  <option value="DEBT">Nợ cước chưa thanh toán (DEBT)</option>
-                  <option value="STOLEN">Báo mất thẻ vật lý (STOLEN)</option>
-                  <option value="FRAUD">Gian lận / Phát hiện giả mạo (FRAUD)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Ghi chú chi tiết
+                  Lý do đưa vào danh sách đen (Bắt buộc)
                 </label>
                 <textarea
                   required
                   rows={3}
-                  placeholder="Nhập lý do chi tiết hoặc số tiền nợ cước..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Nhập lý do chi tiết (ví dụ: Nợ cước 50k, báo mất thẻ...)"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
                   className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm resize-none"
                 />
               </div>
@@ -409,6 +414,46 @@ export default function BlacklistPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+          />
+          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl w-full max-w-md p-6 z-10">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="p-2 bg-warning/10 rounded-full text-warning mt-0.5">
+                <AlertTriangle className="h-6 w-6 text-secondary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-on-surface">Xác nhận mở khóa thẻ</h3>
+                <p className="text-sm text-on-surface-variant mt-1">
+                  Bạn có chắc chắn muốn mở khóa và gỡ thẻ <strong>{confirmModal.cardUid}</strong> khỏi danh sách đen không?
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 border border-outline-variant rounded text-on-surface-variant hover:bg-surface-container-high transition-colors text-xs font-semibold uppercase cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRemove}
+                className="px-4 py-2 bg-secondary text-on-secondary rounded hover:bg-secondary-container transition-colors text-xs font-semibold uppercase cursor-pointer"
+              >
+                Xác nhận
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -39,6 +39,19 @@ export default function RevenueSharePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [operatorsList, setOperatorsList] = useState<any[]>([]);
+
+  // Confirm Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    ruleId: string;
+    operatorCode: string;
+    newStatus: "ACTIVE" | "INACTIVE";
+  }>({
+    isOpen: false,
+    ruleId: "",
+    operatorCode: "",
+    newStatus: "ACTIVE"
+  });
   
   // Form States for new sharing rule
   const [operatorCode, setOperatorCode] = useState("HURC");
@@ -174,24 +187,41 @@ export default function RevenueSharePage() {
     setIsModalOpen(false);
   };
 
-  const handleToggleActive = async (id: string) => {
+  const handleToggleActive = (id: string) => {
     const ruleToToggle = rules.find((r) => r.id === id);
     if (!ruleToToggle) return;
 
     const isCurrentlyActive = ruleToToggle.status === "ACTIVE";
     const nextStatus: "ACTIVE" | "INACTIVE" = isCurrentlyActive ? "INACTIVE" : "ACTIVE";
 
+    setConfirmModal({
+      isOpen: true,
+      ruleId: id,
+      operatorCode: ruleToToggle.operatorCode,
+      newStatus: nextStatus
+    });
+  };
+
+  const handleConfirmToggle = async () => {
+    const { ruleId, operatorCode, newStatus } = confirmModal;
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+
+    const ruleToToggle = rules.find((r) => r.id === ruleId);
+    if (!ruleToToggle) return;
+
+    const isCurrentlyActive = ruleToToggle.status === "ACTIVE";
+
     const updater = (prevRules: RevenueShareRule[]) => {
       let temp = prevRules.map((rule) => {
-        if (rule.id === id) {
-          return { ...rule, status: nextStatus };
+        if (rule.id === ruleId) {
+          return { ...rule, status: newStatus };
         }
         return rule;
       });
 
-      if (nextStatus === "ACTIVE") {
+      if (newStatus === "ACTIVE") {
         temp = temp.map((r) =>
-          r.id !== id && r.operatorCode === ruleToToggle.operatorCode && r.status === "ACTIVE"
+          r.id !== ruleId && r.operatorCode === ruleToToggle.operatorCode && r.status === "ACTIVE"
             ? { ...r, status: "INACTIVE" as const }
             : r
         );
@@ -199,17 +229,19 @@ export default function RevenueSharePage() {
       return temp;
     };
 
+    const originalList = [...rules];
+    setRules(updater);
+
     try {
       if (isCurrentlyActive) {
-        await fetchApi(`/api/revenue-share-rules/${id}`, { method: "DELETE" });
+        await fetchApi(`/api/revenue-share-rules/${ruleId}`, { method: "DELETE" });
       } else {
         console.warn("No explicit activate endpoint, toggling locally");
       }
-      setRules(updater);
     } catch (err: any) {
       console.warn("Toggle rule active status failed, using mock local state. Error:", err.message);
+      setRules(originalList);
       setIsOffline(true);
-      setRules(updater);
     }
   };
 
@@ -552,6 +584,56 @@ export default function RevenueSharePage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+          />
+          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl w-full max-w-md p-6 z-10">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="p-2 bg-warning/10 rounded-full text-warning mt-0.5">
+                <AlertTriangle className="h-6 w-6 text-secondary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-on-surface">Xác nhận thay đổi trạng thái</h3>
+                <p className="text-sm text-on-surface-variant mt-1">
+                  {confirmModal.newStatus === "ACTIVE" ? (
+                    <span>
+                      Bạn có chắc chắn muốn <strong>kích hoạt</strong> quy tắc chia sẻ doanh thu này của nhà vận hành{" "}
+                      <strong>{confirmModal.operatorCode}</strong> không? Các quy tắc đang hoạt động khác của nhà vận hành này sẽ tự động bị tạm dừng.
+                    </span>
+                  ) : (
+                    <span>
+                      Bạn có chắc chắn muốn <strong>tạm dừng</strong> quy tắc chia sẻ doanh thu này của nhà vận hành{" "}
+                      <strong>{confirmModal.operatorCode}</strong> không?
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 border border-outline-variant rounded text-on-surface-variant hover:bg-surface-container-high transition-colors text-xs font-semibold uppercase cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmToggle}
+                className="px-4 py-2 bg-secondary text-on-secondary rounded hover:bg-secondary-container transition-colors text-xs font-semibold uppercase cursor-pointer"
+              >
+                Xác nhận
+              </button>
+            </div>
           </div>
         </div>
       )}

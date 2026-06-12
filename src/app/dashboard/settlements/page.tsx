@@ -54,81 +54,52 @@ interface ReconciliationLog {
   performedBy: string;
 }
 
+const formatMoney = (amount: number) => {
+  const hasDecimals = Math.abs(amount) % 1 >= 0.005;
+  return amount.toLocaleString("en-US", {
+    minimumFractionDigits: hasDecimals ? 2 : 0,
+    maximumFractionDigits: 2
+  });
+};
+
+const translateSettlementError = (errorMsg: string): string => {
+  const msg = errorMsg || "";
+  
+  if (msg.includes("SETTLEMENT_ALREADY_EXISTS") || msg.includes("already exists")) {
+    return "Kỳ quyết toán này đã tồn tại trong hệ thống và không thể tạo hoặc chạy lại.";
+  }
+  if (msg.includes("SETTLEMENT_NO_TRIPS") || msg.includes("No completed trips")) {
+    return "Không tìm thấy bất kỳ chuyến đi hoàn thành nào trong kỳ này để thực hiện đối soát.";
+  }
+  if (msg.includes("SETTLEMENT_HAS_UNRESOLVED_ANOMALIES") || msg.includes("unresolved anomalies")) {
+    const match = msg.match(/(\d+)\s+unresolved/);
+    const count = match ? match[1] : "";
+    return `Kỳ quyết toán này có ${count ? count + " " : ""}giao dịch/chuyến đi bất thường chưa được giải quyết. Vui lòng xử lý hết các sự cố trước khi chạy quyết toán.`;
+  }
+  if (msg.includes("SETTLEMENT_NOT_PENDING") || msg.includes("not in pending") || msg.includes("NOT_PENDING")) {
+    return "Kỳ quyết toán không ở trạng thái chờ duyệt (DRAFT) nên không thể thực hiện khóa sổ.";
+  }
+  if (msg.includes("SETTLEMENT_RECONCILE_FAIL") || msg.includes("reconciliation status is MISMATCH") || msg.includes("RECONCILE_FAIL")) {
+    return "Đối soát thất bại do có sai lệch số liệu vượt quá ngưỡng dung sai cho phép (MISMATCH).";
+  }
+  if (msg.includes("SETTLEMENT_NOT_FOUND") || msg.includes("not found")) {
+    return "Không tìm thấy kỳ quyết toán yêu cầu trên hệ thống.";
+  }
+  
+  return errorMsg;
+};
+
 export default function SettlementsPage() {
   const [periods, setPeriods] = useState<SettlementPeriod[]>([]);
 
-  const [selectedPeriod, setSelectedPeriod] = useState<string>("2026-05");
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("");
   const [isOffline, setIsOffline] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Operator shares data mapped by period
-  const [operatorShares, setOperatorShares] = useState<Record<string, OperatorShare[]>>({
-    "2026-05": [
-      {
-        operatorCode: "HURC",
-        operatorName: "Công ty Đường sắt Đô thị Hà Nội",
-        totalKm: 145200,
-        totalTrips: 185400,
-        expectedShare: 1110000000,
-        actualShare: 1109100000,
-        roundingAdjustment: -900000,
-        status: "PENDING"
-      },
-      {
-        operatorCode: "TRANSERCO",
-        operatorName: "Tổng công ty Vận tải Hà Nội",
-        totalKm: 320400,
-        totalTrips: 452100,
-        expectedShare: 740000000,
-        actualShare: 739400000,
-        roundingAdjustment: -600000,
-        status: "PENDING"
-      }
-    ],
-    "2026-04": [
-      {
-        operatorCode: "HURC",
-        operatorName: "Công ty Đường sắt Đô thị Hà Nội",
-        totalKm: 139100,
-        totalTrips: 172500,
-        expectedShare: 1032000000,
-        actualShare: 1032000000,
-        roundingAdjustment: 0,
-        status: "CONFIRMED"
-      },
-      {
-        operatorCode: "TRANSERCO",
-        operatorName: "Tổng công ty Vận tải Hà Nội",
-        totalKm: 312000,
-        totalTrips: 432000,
-        expectedShare: 688000000,
-        actualShare: 688000000,
-        roundingAdjustment: 0,
-        status: "CONFIRMED"
-      }
-    ],
-    "2026-03": [
-      {
-        operatorCode: "HURC",
-        operatorName: "Công ty Đường sắt Đô thị Hà Nội",
-        totalKm: 135800,
-        totalTrips: 168400,
-        expectedShare: 1008000000,
-        actualShare: 1007520000,
-        roundingAdjustment: -480000,
-        status: "PAID"
-      },
-      {
-        operatorCode: "TRANSERCO",
-        operatorName: "Tổng công ty Vận tải Hà Nội",
-        totalKm: 308000,
-        totalTrips: 421000,
-        expectedShare: 672000000,
-        actualShare: 671680000,
-        roundingAdjustment: -320000,
-        status: "PAID"
-      }
-    ]
-  });
+  const [operatorShares, setOperatorShares] = useState<Record<string, OperatorShare[]>>({});
 
   // Logs data
   const [logs, setLogs] = useState<ReconciliationLog[]>([]);
@@ -152,7 +123,7 @@ export default function SettlementsPage() {
             period: s.period,
             expectedRevenue: s.totalExpected || 0,
             actualRevenue: s.totalActual || 0,
-            discrepancy: s.diffAmount || 0,
+            discrepancy: (s.totalExpected || 0) - (s.totalActual || 0),
             status: (s.status === "CONFIRMED" || s.status === "LOCKED" ? "LOCKED" : "OPEN") as SettlementPeriod["status"],
             lastReconciledAt: s.ranAt ? new Date(s.ranAt).toISOString().replace("T", " ").substring(0, 16) : "",
             reconciledBy: s.ranBy || "Hệ thống"
@@ -181,8 +152,10 @@ export default function SettlementsPage() {
           }
         }
       } catch (err: any) {
-        console.warn("FMC Settlements API is offline. Running in mock fallback mode. Error:", err.message);
+        console.warn("FMC Settlements API is offline. Error:", err.message);
         setIsOffline(true);
+        const translatedMsg = translateSettlementError(err.message);
+        setPageError(`Không thể tải dữ liệu quyết toán từ máy chủ API: ${translatedMsg}`);
       }
     }
     loadSettlements();
@@ -234,59 +207,25 @@ export default function SettlementsPage() {
     e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      startSimulatedUpload();
+      setSelectedFile(e.dataTransfer.files[0]);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      startSimulatedUpload();
+      setSelectedFile(e.target.files[0]);
     }
   };
 
-  const startSimulatedUpload = () => {
-    setIsUploading(true);
-    setUploadProgress(0);
-  };
-
   const startSettlementRun = async () => {
+    if (!selectedUploadPeriod) return;
     const [yearStr, monthStr] = selectedUploadPeriod.split("-");
     const year = parseInt(yearStr);
     const month = parseInt(monthStr);
 
-    const fallbackPeriod = {
-      id: 'mock-' + Date.now(),
-      period: selectedUploadPeriod,
-      expectedRevenue: 1950000000,
-      actualRevenue: 1947800000,
-      discrepancy: -2200000,
-      status: "OPEN" as const,
-      lastReconciledAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-      reconciledBy: "Trần Văn B (Admin)"
-    };
-
-    const fallbackShares = [
-      {
-        operatorCode: "HURC",
-        operatorName: "Công ty Đường sắt Đô thị Hà Nội",
-        totalKm: 151000,
-        totalTrips: 192000,
-        expectedShare: 1170000000,
-        actualShare: 1168500000,
-        roundingAdjustment: -1500000,
-        status: "PENDING" as const
-      },
-      {
-        operatorCode: "TRANSERCO",
-        operatorName: "Tổng công ty Vận tải Hà Nội",
-        totalKm: 335000,
-        totalTrips: 471000,
-        expectedShare: 780000000,
-        actualShare: 779300000,
-        roundingAdjustment: -700000,
-        status: "PENDING" as const
-      }
-    ];
+    setIsUploading(true);
+    setPageError(null);
+    setModalError(null);
 
     try {
       const s = await fetchApi("/api/settlements/run", {
@@ -294,12 +233,12 @@ export default function SettlementsPage() {
         body: JSON.stringify({ year, month })
       });
 
-      const newPeriod = {
+      const newPeriod: SettlementPeriod = {
         id: s.settlementId,
         period: s.period,
         expectedRevenue: s.totalExpected || 0,
         actualRevenue: s.totalActual || 0,
-        discrepancy: s.diffAmount || 0,
+        discrepancy: (s.totalExpected || 0) - (s.totalActual || 0),
         status: s.status === "CONFIRMED" || s.status === "LOCKED" ? "LOCKED" as const : "OPEN" as const,
         lastReconciledAt: s.ranAt ? new Date(s.ranAt).toISOString().replace("T", " ").substring(0, 16) : "",
         reconciledBy: s.ranBy || "Hệ thống"
@@ -322,50 +261,16 @@ export default function SettlementsPage() {
         [selectedUploadPeriod]: newShares
       }));
       setSelectedPeriod(selectedUploadPeriod);
+      setSelectedFile(null);
+      setIsReconcileModalOpen(false);
     } catch (err: any) {
-      console.warn("POST run settlement failed. Falling back to local state. Error:", err.message);
-      setIsOffline(true);
-      
-      setPeriods(prev => [fallbackPeriod, ...prev.filter(p => p.period !== selectedUploadPeriod)]);
-      setOperatorShares(prev => ({
-        ...prev,
-        [selectedUploadPeriod]: fallbackShares
-      }));
-      setSelectedPeriod(selectedUploadPeriod);
-
-      const newLog = {
-        id: 'log-' + Date.now(),
-        timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
-        period: selectedUploadPeriod,
-        action: "Đối soát định kỳ tải lên",
-        status: "WARNING" as const,
-        details: "Phát hiện chênh lệch -2,200,000 ₫ khi đối soát thủ công dữ liệu giao dịch tháng " + selectedUploadPeriod + ".",
-        performedBy: "Trần Văn B (Admin)"
-      };
-      setLogs(prev => [newLog, ...prev]);
+      console.error("POST run settlement failed. Error:", err);
+      const translatedMsg = translateSettlementError(err.message);
+      setModalError(`Lỗi chạy đối soát: ${translatedMsg}`);
+    } finally {
+      setIsUploading(false);
     }
   };
-
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isUploading) {
-      interval = setInterval(() => {
-        setUploadProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            setTimeout(() => {
-              setIsUploading(false);
-              setIsReconcileModalOpen(false);
-              startSettlementRun();
-            }, 500);
-            return 100;
-          }
-          return prev + 20;
-        });
-      }, 200);
-    }
-    return () => clearInterval(interval);
-  }, [isUploading, selectedUploadPeriod, periods, operatorShares, logs]);
 
   const handleLockPeriod = async () => {
     if (!activePeriodInfo || !activePeriodInfo.id) return;
@@ -383,9 +288,7 @@ export default function SettlementsPage() {
     };
 
     try {
-      if (!activePeriodInfo.id.startsWith("mock-")) {
-        await fetchApi("/api/settlements/" + activePeriodInfo.id + "/confirm", { method: "PATCH" });
-      }
+      await fetchApi("/api/settlements/" + activePeriodInfo.id + "/confirm", { method: "PATCH" });
       updater();
 
       const newLog = {
@@ -395,13 +298,13 @@ export default function SettlementsPage() {
         action: "Khóa sổ quyết toán",
         status: "SUCCESS" as const,
         details: "Đã khóa dữ liệu và xác nhận bảng phân chia doanh thu kỳ Tháng " + selectedPeriod.substring(5) + "/" + selectedPeriod.substring(0, 4) + ".",
-        performedBy: "Trần Văn B (Admin)"
+        performedBy: "Hệ thống"
       };
       setLogs(prev => [newLog, ...prev]);
     } catch (err: any) {
-      console.warn("Confirm settlement failed, using local mock. Error:", err.message);
-      setIsOffline(true);
-      updater();
+      console.error("Confirm settlement failed. Error:", err);
+      const translatedMsg = translateSettlementError(err.message);
+      setPageError(`Lỗi khóa sổ: ${translatedMsg}`);
     }
     setIsConfirmLockOpen(false);
   };
@@ -430,7 +333,7 @@ export default function SettlementsPage() {
       action: "Mở khóa sổ quyết toán",
       status: "WARNING" as const,
       details: "Kỳ quyết toán Tháng " + periodStr.substring(5) + "/" + periodStr.substring(0, 4) + " đã được mở khóa để đối soát lại dữ liệu.",
-      performedBy: "Trần Văn B (Admin)"
+      performedBy: "Hệ thống"
     };
     setLogs([newLog, ...logs]);
   };
@@ -451,7 +354,7 @@ export default function SettlementsPage() {
         action: "Thanh toán phân chia",
         status: "SUCCESS" as const,
         details: "Đã cập nhật trạng thái đã thanh toán cho nhà vận hành " + operatorCode + " trong kỳ quyết toán " + selectedPeriod + ".",
-        performedBy: "Trần Văn B (Admin)"
+        performedBy: "Hệ thống"
       };
       setLogs([newLog, ...logs]);
     }
@@ -467,6 +370,20 @@ export default function SettlementsPage() {
         </div>
       )}
 
+      {pageError && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4 text-error" /> {pageError}
+          </span>
+          <button
+            onClick={() => setPageError(null)}
+            className="p-1 hover:bg-error-container/20 rounded cursor-pointer"
+          >
+            <X className="h-3.5 w-3.5 text-on-error-container" />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -479,7 +396,11 @@ export default function SettlementsPage() {
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
           <button
-            onClick={() => setIsReconcileModalOpen(true)}
+            onClick={() => {
+              setModalError(null);
+              setSelectedFile(null);
+              setIsReconcileModalOpen(true);
+            }}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-secondary text-on-secondary rounded-full hover:opacity-90 transition-opacity font-label-caps text-xs uppercase cursor-pointer w-full sm:w-auto"
           >
             <RefreshCw className="h-4 w-4" /> Đối soát dữ liệu
@@ -497,11 +418,15 @@ export default function SettlementsPage() {
             onChange={(e) => setSelectedPeriod(e.target.value)}
             className="bg-surface-container-high border-none rounded-md py-1.5 px-3 font-body-sm text-body-sm text-on-surface outline-none cursor-pointer w-48 font-data-mono"
           >
-            {periods.map((p) => (
-              <option key={p.period} value={p.period}>
-                Tháng {p.period.substring(5)}/{p.period.substring(0, 4)}
-              </option>
-            ))}
+            {periods.length > 0 ? (
+              periods.map((p) => (
+                <option key={p.period} value={p.period}>
+                  Tháng {p.period.substring(5)}/{p.period.substring(0, 4)}
+                </option>
+              ))
+            ) : (
+              <option value="">Chưa có dữ liệu</option>
+            )}
           </select>
         </div>
 
@@ -544,7 +469,7 @@ export default function SettlementsPage() {
             Doanh thu dự kiến (Mô phỏng)
           </h3>
           <div className="text-2xl font-bold text-on-surface font-data-mono">
-            ₫ {activePeriodInfo.expectedRevenue.toLocaleString()}
+            ₫ {formatMoney(activePeriodInfo.expectedRevenue)}
           </div>
           <p className="text-[11px] text-on-surface-variant mt-1">Dựa trên log bán vé & thẻ phát hành</p>
         </div>
@@ -554,7 +479,7 @@ export default function SettlementsPage() {
             Doanh thu thực tế (Check-in/out)
           </h3>
           <div className="text-2xl font-bold text-on-surface font-data-mono flex items-center gap-1.5">
-            ₫ {activePeriodInfo.actualRevenue.toLocaleString()}
+            ₫ {formatMoney(activePeriodInfo.actualRevenue)}
           </div>
           <p className="text-[11px] text-on-surface-variant mt-1">Dựa trên log quẹt thẻ thực tế tại cổng ga</p>
         </div>
@@ -565,21 +490,25 @@ export default function SettlementsPage() {
           </h3>
           <div
             className={`text-2xl font-bold font-data-mono flex items-center gap-1 ${
-              activePeriodInfo.discrepancy === 0
+              Math.abs(activePeriodInfo.discrepancy) < 0.001
                 ? "text-tertiary-fixed-dim"
+                : Math.abs(activePeriodInfo.discrepancy) <= 1.0
+                ? "text-outline-variant"
                 : "text-error"
             }`}
           >
             {activePeriodInfo.discrepancy > 0 ? "+" : ""}
-            ₫ {activePeriodInfo.discrepancy.toLocaleString()}
-            {activePeriodInfo.discrepancy !== 0 && (
+            ₫ {formatMoney(activePeriodInfo.discrepancy)}
+            {Math.abs(activePeriodInfo.discrepancy) >= 0.001 && (
               <AlertTriangle className="h-4 w-4 ml-1 animate-pulse" />
             )}
           </div>
           <p className="text-[11px] text-on-surface-variant mt-1">
-            {activePeriodInfo.discrepancy === 0
+            {Math.abs(activePeriodInfo.discrepancy) < 0.001
               ? "Hoàn hảo, không sai lệch"
-              : `Lệch ${((Math.abs(activePeriodInfo.discrepancy) / activePeriodInfo.expectedRevenue) * 100).toFixed(3)}% tổng thu`}
+              : Math.abs(activePeriodInfo.discrepancy) <= 1.0
+              ? "Sai lệch nhỏ do làm tròn số phân chia"
+              : `Lệch ${((Math.abs(activePeriodInfo.discrepancy) / (activePeriodInfo.expectedRevenue || 1)) * 100).toFixed(3)}% tổng thu`}
           </p>
         </div>
 
@@ -658,11 +587,11 @@ export default function SettlementsPage() {
                         {share.totalTrips.toLocaleString()}
                       </td>
                       <td className="p-table-cell-padding text-right font-data-mono font-semibold text-secondary-fixed-dim">
-                        ₫ {share.actualShare.toLocaleString()}
+                        ₫ {formatMoney(share.actualShare)}
                       </td>
                       <td className="p-table-cell-padding text-right font-data-mono text-error">
                         {share.roundingAdjustment !== 0
-                          ? `₫ ${share.roundingAdjustment.toLocaleString()}`
+                          ? `₫ ${formatMoney(share.roundingAdjustment)}`
                           : "—"}
                       </td>
                       <td className="p-table-cell-padding">
@@ -822,24 +751,38 @@ export default function SettlementsPage() {
             </div>
 
             <div className="space-y-4">
+              {modalError && (
+                <div className="px-4 py-2.5 bg-error-container text-on-error-container text-xs rounded-lg flex items-center justify-between border border-error/20">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <AlertTriangle className="h-4 w-4 text-error flex-shrink-0" /> {modalError}
+                  </span>
+                  <button
+                    onClick={() => setModalError(null)}
+                    className="p-1 hover:bg-error-container/20 rounded cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5 text-on-error-container" />
+                  </button>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Chọn Kỳ Quyết Toán cần nhập dữ liệu:
+                  Chọn Kỳ Quyết Toán cần đối soát (Tháng/Năm):
                 </label>
-                <select
+                <input
+                  type="month"
                   value={selectedUploadPeriod}
                   onChange={(e) => setSelectedUploadPeriod(e.target.value)}
                   className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono cursor-pointer"
                   disabled={isUploading}
-                >
-                  <option value="2026-06">Tháng 06/2026 (Kỳ kế tiếp)</option>
-                  <option value="2026-05">Tháng 05/2026 (Chạy lại đối soát)</option>
-                </select>
+                />
+                <p className="text-[11px] text-on-surface-variant mt-1">
+                  Hệ thống sẽ tự động tổng hợp đối soát dựa trên tất cả dữ liệu giao dịch sẵn có trên Backend.
+                </p>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Kéo thả hoặc tải tập tin log giao dịch (.csv, .xlsx, .json):
+                  Tải lên tệp log bổ sung ngoài hệ thống (Tùy chọn - Không bắt buộc):
                 </label>
                 
                 <div
@@ -862,23 +805,32 @@ export default function SettlementsPage() {
                   />
                   <Upload className="h-10 w-10 text-outline opacity-65" />
                   <div>
-                    <p className="text-xs font-semibold text-on-surface">Click để chọn tệp hoặc kéo thả tệp tại đây</p>
+                    <p className="text-xs font-semibold text-on-surface">
+                      {selectedFile ? `Đã chọn tệp: ${selectedFile.name}` : "Click để chọn tệp hoặc kéo thả tệp tại đây"}
+                    </p>
+                    {selectedFile && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setSelectedFile(null);
+                        }}
+                        className="mt-2 px-2 py-0.5 bg-error/10 text-error hover:bg-error/20 rounded text-[10px] font-semibold cursor-pointer z-20 relative"
+                      >
+                        Gỡ bỏ tệp
+                      </button>
+                    )}
                     <p className="text-[10px] text-on-surface-variant mt-1">Dung lượng tối đa: 50MB</p>
                   </div>
                 </div>
               </div>
 
               {isUploading && (
-                <div className="space-y-2 p-3 bg-surface-container-high border border-outline-variant rounded-lg">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-on-surface">Đang xử lý & phân tích log đối soát...</span>
-                    <span className="text-secondary font-data-mono">{uploadProgress}%</span>
-                  </div>
-                  <div className="w-full bg-surface-container-lowest rounded-full h-2 overflow-hidden">
-                    <div
-                      className="bg-secondary h-full transition-all duration-300"
-                      style={{ width: `${uploadProgress}%` }}
-                    />
+                <div className="space-y-2 p-3 bg-surface-container-high border border-outline-variant rounded-lg flex flex-col items-center justify-center">
+                  <div className="flex items-center gap-2 text-xs font-semibold">
+                    <RefreshCw className="h-4 w-4 animate-spin text-secondary" />
+                    <span className="text-on-surface">Đang đối soát dữ liệu trên máy chủ...</span>
                   </div>
                 </div>
               )}
@@ -894,11 +846,11 @@ export default function SettlementsPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={startSimulatedUpload}
+                  onClick={startSettlementRun}
                   className="px-4 py-2 bg-secondary text-on-secondary rounded hover:bg-secondary-container transition-colors text-xs font-semibold uppercase cursor-pointer"
                   disabled={isUploading}
                 >
-                  Bắt đầu đối soát
+                  {isUploading ? "Đang xử lý..." : "Bắt đầu đối soát kỳ này"}
                 </button>
               </div>
             </div>

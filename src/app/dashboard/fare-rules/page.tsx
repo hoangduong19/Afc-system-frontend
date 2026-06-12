@@ -37,6 +37,24 @@ export default function FareRulesPage() {
   const [modalMode, setModalMode] = useState<"CREATE" | "EDIT">("CREATE");
   const [selectedRule, setSelectedRule] = useState<FareRule | null>(null);
   const [isOffline, setIsOffline] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+
+  // Confirm Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    ruleId: string;
+    ruleCode: string;
+    newStatus: "ACTIVE" | "INACTIVE";
+    requireReason: boolean;
+    reason: string;
+  }>({
+    isOpen: false,
+    ruleId: "",
+    ruleCode: "",
+    newStatus: "ACTIVE",
+    requireReason: false,
+    reason: ""
+  });
 
   // Form State
   const [code, setCode] = useState("");
@@ -101,23 +119,45 @@ export default function FareRulesPage() {
     setIsModalOpen(true);
   };
 
-  const handleToggleStatus = async (id: string) => {
+  const handleToggleStatus = (id: string) => {
     const rule = rules.find((r) => r.id === id);
     if (!rule) return;
-    const nextStatus = rule.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    setConfirmError(null);
+    setConfirmModal({
+      isOpen: true,
+      ruleId: id,
+      ruleCode: rule.code,
+      newStatus: "INACTIVE",
+      requireReason: true,
+      reason: ""
+    });
+  };
+
+  const handleConfirmToggle = async () => {
+    const { ruleId, ruleCode, newStatus, reason, requireReason } = confirmModal;
+
+    if (requireReason && !reason.trim()) {
+      setConfirmError("Lý do thực hiện hành động là bắt buộc và không được để trống.");
+      return;
+    }
+
+    setConfirmError(null);
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+
+    const originalList = [...rules];
     setRules(
       rules.map((r) =>
-        r.id === id ? { ...r, status: nextStatus } : r
+        r.id === ruleId ? { ...r, status: "INACTIVE" } : r
       )
     );
     try {
-      if (nextStatus === "INACTIVE") {
-        await fetchApi("/api/fare-rules/" + id + "/disable", { method: "PATCH" });
-      } else {
-        console.warn("No explicit enable endpoint, toggled locally");
-      }
+      await fetchApi("/api/fare-rules/" + ruleId + "/disable", {
+        method: "PATCH",
+        body: JSON.stringify({ reason: reason.trim() })
+      });
     } catch (err: any) {
       console.warn("Toggle status API failed, using mock local state. Error:", err.message);
+      setRules(originalList);
       setIsOffline(true);
     }
   };
@@ -402,17 +442,15 @@ export default function FareRulesPage() {
                         >
                           <Edit2 className="h-4 w-4" />
                         </button>
-                        <button
-                          onClick={() => handleToggleStatus(rule.id)}
-                          className={`p-1 hover:bg-surface-container-high rounded transition-colors cursor-pointer ${
-                            rule.status === "ACTIVE"
-                              ? "text-error hover:bg-error-container/20"
-                              : "text-tertiary-fixed-dim hover:bg-tertiary-fixed-dim/20"
-                          }`}
-                          title={rule.status === "ACTIVE" ? "Vô hiệu hóa" : "Kích hoạt"}
-                        >
-                          <Power className="h-4 w-4" />
-                        </button>
+                        {rule.status === "ACTIVE" && (
+                          <button
+                            onClick={() => handleToggleStatus(rule.id)}
+                            className="p-1 hover:bg-surface-container-high rounded transition-colors cursor-pointer text-error hover:bg-error-container/20"
+                            title="Vô hiệu hóa"
+                          >
+                            <Power className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -586,6 +624,72 @@ export default function FareRulesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+          />
+          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl w-full max-w-md p-6 z-10">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="p-2 bg-warning/10 rounded-full text-warning mt-0.5">
+                <AlertTriangle className="h-6 w-6 text-secondary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-on-surface">Xác nhận vô hiệu hóa quy tắc</h3>
+                <p className="text-sm text-on-surface-variant mt-1">
+                  Bạn có chắc chắn muốn chuyển trạng thái quy tắc giá vé <strong>{confirmModal.ruleCode}</strong> sang{" "}
+                  <strong>TẠM DỪNG (INACTIVE)</strong> không? Hành động này không thể hoàn tác.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {confirmModal.requireReason && (
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                    Nhập lý do thực hiện (Bắt buộc)
+                  </label>
+                  <textarea
+                    required
+                    rows={3}
+                    placeholder="Vui lòng điền lý do..."
+                    value={confirmModal.reason}
+                    onChange={(e) => setConfirmModal(prev => ({ ...prev, reason: e.target.value }))}
+                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm resize-none"
+                  />
+                </div>
+              )}
+
+              {confirmError && (
+                <div className="px-3 py-2 bg-error-container text-on-error-container text-xs rounded-lg flex items-center gap-2 border border-error/20">
+                  <AlertTriangle className="h-4 w-4 text-error shrink-0" />
+                  <span>{confirmError}</span>
+                </div>
+              )}
+
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                  className="px-4 py-2 border border-outline-variant rounded text-on-surface-variant hover:bg-surface-container-high transition-colors text-xs font-semibold uppercase cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmToggle}
+                  className="px-4 py-2 bg-secondary text-on-secondary rounded hover:bg-secondary-container transition-colors text-xs font-semibold uppercase cursor-pointer"
+                >
+                  Xác nhận
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

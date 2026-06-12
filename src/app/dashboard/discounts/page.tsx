@@ -34,6 +34,19 @@ export default function DiscountsPage() {
   const [selectedDiscount, setSelectedDiscount] = useState<FareDiscount | null>(null);
   const [isOffline, setIsOffline] = useState(false);
 
+  // Confirm Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    discountId: string;
+    passengerType: string;
+    newStatus: "ACTIVE" | "INACTIVE";
+  }>({
+    isOpen: false,
+    discountId: "",
+    passengerType: "",
+    newStatus: "ACTIVE"
+  });
+
   // Form State
   const [passengerType, setPassengerType] = useState<"STUDENT" | "SENIOR" | "PRIORITY">("STUDENT");
   const [discountType, setDiscountType] = useState<"PERCENT" | "FIXED">("PERCENT");
@@ -85,25 +98,33 @@ export default function DiscountsPage() {
     setIsModalOpen(true);
   };
 
-  const handleToggleStatus = async (id: string) => {
+  const handleToggleStatus = (id: string) => {
     const ds = discounts.find((d) => d.id === id);
     if (!ds) return;
-    const nextStatus = ds.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-    
+    setConfirmModal({
+      isOpen: true,
+      discountId: id,
+      passengerType: ds.passengerType,
+      newStatus: "INACTIVE"
+    });
+  };
+
+  const handleConfirmToggle = async () => {
+    const { discountId, passengerType, newStatus } = confirmModal;
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+
+    const originalList = [...discounts];
     setDiscounts(
       discounts.map((d) =>
-        d.id === id ? { ...d, status: nextStatus } : d
+        d.id === discountId ? { ...d, status: "INACTIVE" } : d
       )
     );
 
     try {
-      if (nextStatus === "INACTIVE") {
-        await fetchApi("/api/fare-discounts/" + id + "/disable", { method: "PATCH" });
-      } else {
-        console.warn("No explicit enable endpoint, toggled locally");
-      }
+      await fetchApi("/api/fare-discounts/" + discountId + "/disable", { method: "PATCH" });
     } catch (err: any) {
       console.warn("Toggle status API failed, using mock local state. Error:", err.message);
+      setDiscounts(originalList);
       setIsOffline(true);
     }
   };
@@ -337,17 +358,15 @@ export default function DiscountsPage() {
                         >
                           <Edit2 className="h-4 w-4" />
                         </button>
-                        <button
-                          onClick={() => handleToggleStatus(ds.id)}
-                          className={`p-1 hover:bg-surface-container-high rounded transition-colors cursor-pointer ${
-                            ds.status === "ACTIVE"
-                              ? "text-error hover:bg-error-container/20"
-                              : "text-tertiary-fixed-dim hover:bg-tertiary-fixed-dim/20"
-                          }`}
-                          title={ds.status === "ACTIVE" ? "Vô hiệu hóa" : "Kích hoạt"}
-                        >
-                          <Power className="h-4 w-4" />
-                        </button>
+                        {ds.status === "ACTIVE" && (
+                          <button
+                            onClick={() => handleToggleStatus(ds.id)}
+                            className="p-1 hover:bg-surface-container-high rounded transition-colors cursor-pointer text-error hover:bg-error-container/20"
+                            title="Vô hiệu hóa"
+                          >
+                            <Power className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -474,6 +493,47 @@ export default function DiscountsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+          />
+          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl w-full max-w-md p-6 z-10">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="p-2 bg-warning/10 rounded-full text-warning mt-0.5">
+                <AlertTriangle className="h-6 w-6 text-secondary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-on-surface">Xác nhận vô hiệu hóa chính sách</h3>
+                <p className="text-sm text-on-surface-variant mt-1">
+                  Bạn có chắc chắn muốn chuyển trạng thái chính sách giảm giá cho đối tượng <strong>{confirmModal.passengerType}</strong> sang{" "}
+                  <strong>TẠM DỪNG (INACTIVE)</strong> không? Hành động này không thể hoàn tác.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 border border-outline-variant rounded text-on-surface-variant hover:bg-surface-container-high transition-colors text-xs font-semibold uppercase cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmToggle}
+                className="px-4 py-2 bg-secondary text-on-secondary rounded hover:bg-secondary-container transition-colors text-xs font-semibold uppercase cursor-pointer"
+              >
+                Xác nhận
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -11,7 +11,8 @@ import {
   ShieldAlert,
   Info,
   X,
-  MessageSquare
+  MessageSquare,
+  Coins
 } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 
@@ -39,7 +40,9 @@ export default function AnomaliesPage() {
   // Resolve Action Modal State
   const [selectedAnomaly, setSelectedAnomaly] = useState<AnomalyItem | null>(null);
   const [resolutionNote, setResolutionNote] = useState("");
+  const [correctedFare, setCorrectedFare] = useState("");
   const [actionType, setActionType] = useState<"RESOLVE" | "IGNORE">("RESOLVE");
+  const [modalError, setModalError] = useState<string | null>(null);
 
   async function loadAnomalies() {
     try {
@@ -73,6 +76,8 @@ export default function AnomaliesPage() {
     setSelectedAnomaly(anomaly);
     setActionType(type);
     setResolutionNote("");
+    setCorrectedFare("");
+    setModalError(null);
   };
 
   const handleResolveAnomaly = async (e: React.FormEvent) => {
@@ -84,26 +89,38 @@ export default function AnomaliesPage() {
       alt.id === selectedAnomaly.id
         ? {
             ...alt,
-            isResolved: actionType === "RESOLVE",
+            isResolved: true,
             notes: resolutionNote,
             resolvedAt: resolvedTime.replace("T", " ").substring(0, 19),
-            resolvedBy: "Trần Văn B (Admin)"
+            resolvedBy: "Người vận hành"
           }
         : alt;
 
+    setModalError(null);
+
     try {
+      const fare = correctedFare.trim() ? parseFloat(correctedFare) : null;
       await fetchApi(`/api/anomalies/${selectedAnomaly.id}/resolve`, {
         method: "PATCH",
-        body: JSON.stringify({ notes: resolutionNote })
+        body: JSON.stringify({
+          notes: resolutionNote,
+          correctedFare: fare
+        })
       });
       setAnomalies(prev => prev.map(updater));
+      setSelectedAnomaly(null);
     } catch (err: any) {
-      console.warn("PATCH resolve anomaly failed. Falling back to local state. Error:", err.message);
-      setIsOffline(true);
-      setAnomalies(prev => prev.map(updater));
+      console.error("PATCH resolve anomaly failed. Error:", err);
+      const isNetworkError = !err.message || err.message.toLowerCase().includes("failed to fetch") || err.message.toLowerCase().includes("networkerror") || err.message.toLowerCase().includes("api request failed with status");
+      
+      if (!isNetworkError) {
+        setModalError(`Lỗi khắc phục sự cố: ${err.message || "Không thể thực hiện."}`);
+      } else {
+        setIsOffline(true);
+        setAnomalies(prev => prev.map(updater));
+        setSelectedAnomaly(null);
+      }
     }
-
-    setSelectedAnomaly(null);
   };
 
   const filteredAnomalies = anomalies.filter((alt) => {
@@ -349,6 +366,20 @@ export default function AnomaliesPage() {
               </button>
             </div>
 
+            {modalError && (
+              <div className="px-4 py-2.5 bg-error-container text-on-error-container text-xs rounded-lg flex items-center justify-between border border-error/20">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <AlertTriangle className="h-4 w-4 text-error flex-shrink-0" /> {modalError}
+                </span>
+                <button
+                  onClick={() => setModalError(null)}
+                  className="p-1 hover:bg-error-container/20 rounded cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5 text-on-error-container" />
+                </button>
+              </div>
+            )}
+
             <div className="text-xs text-on-surface-variant space-y-2 bg-surface-container-low p-3 rounded border border-outline-variant">
               <div><strong>Mã sự cố:</strong> <span className="font-data-mono text-on-surface select-all break-all">{selectedAnomaly.id}</span></div>
               <div><strong>Phân loại:</strong> <span className="text-on-surface">{selectedAnomaly.anomalyType}</span></div>
@@ -366,6 +397,21 @@ export default function AnomaliesPage() {
                   value={resolutionNote}
                   onChange={(e) => setResolutionNote(e.target.value)}
                   className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm h-24"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-on-surface-variant mb-1 flex items-center gap-1">
+                  <Coins className="h-3.5 w-3.5" /> Giá vé sửa đổi (correctedFare) - Tùy chọn:
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Nhập giá vé đã sửa đổi (nếu có)..."
+                  value={correctedFare}
+                  onChange={(e) => setCorrectedFare(e.target.value)}
+                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
                 />
               </div>
 

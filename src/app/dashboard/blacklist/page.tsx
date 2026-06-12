@@ -29,6 +29,8 @@ export default function BlacklistPage() {
   const [reasonFilter, setReasonFilter] = useState("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
 
   // Form State
   const [cardUid, setCardUid] = useState("");
@@ -60,7 +62,7 @@ export default function BlacklistPage() {
           })));
         }
       } catch (err: any) {
-        console.warn("FMC Blacklist API is offline. Running in mock fallback mode. Error:", err.message);
+        console.warn("FMC Blacklist API is offline.", err.message);
         setIsOffline(true);
       }
     }
@@ -71,11 +73,13 @@ export default function BlacklistPage() {
     setCardUid("");
     setReason("DEBT");
     setNotes("");
+    setModalError(null);
     setIsModalOpen(true);
   };
 
   const handleAddBlacklist = async (e: React.FormEvent) => {
     e.preventDefault();
+    setModalError(null);
     
     let resolvedCardId = cardUid;
     try {
@@ -104,30 +108,26 @@ export default function BlacklistPage() {
         notes: notes || (reason === "DEBT" ? "Nợ cước chưa thanh toán" : reason === "STOLEN" ? "Báo mất thẻ vật lý" : "Gian lận / Phát hiện giả mạo"),
         blockedAt: res.addedAt ? new Date(res.addedAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16)
       }, ...blacklist]);
+      setIsModalOpen(false);
     } catch (err: any) {
-      console.warn("POST /api/blacklist failed, using mock local state. Error:", err.message);
+      console.warn("POST /api/blacklist failed. Error:", err.message);
       setIsOffline(true);
-      
-      const newBlocked = {
-        id: "bl-" + Date.now(),
-        cardUid,
-        reason,
-        notes: notes || (reason === "DEBT" ? "Nợ cước chưa thanh toán" : reason === "STOLEN" ? "Báo mất thẻ vật lý" : "Gian lận / Phát hiện giả mạo"),
-        blockedAt: new Date().toISOString().replace("T", " ").substring(0, 16)
-      };
-      setBlacklist([newBlocked, ...blacklist]);
+      setModalError("Lỗi kết nối tới Backend API. Không thể thêm thẻ vào danh sách đen.");
     }
-    setIsModalOpen(false);
   };
 
   const handleRemoveFromBlacklist = async (id: string, uid: string) => {
     if (confirm("Bạn có chắc chắn muốn mở khóa và gỡ thẻ " + uid + " khỏi danh sách đen?")) {
+      const originalList = [...blacklist];
       setBlacklist(blacklist.filter((item) => item.id !== id));
+      setPageError(null);
       try {
         await fetchApi("/api/blacklist/" + id, { method: "DELETE" });
       } catch (err: any) {
-        console.warn("DELETE /api/blacklist failed, using mock local state. Error:", err.message);
+        console.warn("DELETE /api/blacklist failed. Error:", err.message);
         setIsOffline(true);
+        setBlacklist(originalList);
+        setPageError("Lỗi kết nối tới Backend API. Không thể mở khóa thẻ " + uid + ".");
       }
     }
   };
@@ -141,12 +141,27 @@ export default function BlacklistPage() {
   return (
     <div className="space-y-6">
       {isOffline && (
-        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20">
           <span className="flex items-center gap-2 font-medium">
-            <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
+            <AlertTriangle className="h-4 w-4 text-error" /> Lỗi kết nối tới Backend API. Một số dữ liệu thống kê sẽ hiển thị mặc định bằng 0.
           </span>
         </div>
       )}    
+
+      {pageError && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4 text-error" /> {pageError}
+          </span>
+          <button
+            onClick={() => setPageError(null)}
+            className="p-1 hover:bg-error-container/20 rounded cursor-pointer"
+          >
+            <X className="h-3.5 w-3.5 text-on-error-container" />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -171,25 +186,33 @@ export default function BlacklistPage() {
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Tổng số thẻ bị khóa
           </h3>
-          <div className="text-3xl font-bold text-on-surface">8,930</div>
+          <div className="text-3xl font-bold text-on-surface">
+            {blacklist.length.toLocaleString()}
+          </div>
         </div>
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Nợ cước (DEBT)
           </h3>
-          <div className="text-3xl font-bold text-secondary-fixed-dim">4,500</div>
+          <div className="text-3xl font-bold text-secondary-fixed-dim">
+            {blacklist.filter((c) => c.reason === "DEBT").length.toLocaleString()}
+          </div>
         </div>
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Báo mất (STOLEN)
           </h3>
-          <div className="text-3xl font-bold text-tertiary-fixed-dim">3,430</div>
+          <div className="text-3xl font-bold text-tertiary-fixed-dim">
+            {blacklist.filter((c) => c.reason === "STOLEN").length.toLocaleString()}
+          </div>
         </div>
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Gian lận (FRAUD)
           </h3>
-          <div className="text-3xl font-bold text-error">1,000</div>
+          <div className="text-3xl font-bold text-error">
+            {blacklist.filter((c) => c.reason === "FRAUD").length.toLocaleString()}
+          </div>
         </div>
       </div>
 
@@ -313,6 +336,20 @@ export default function BlacklistPage() {
             </div>
 
             <form onSubmit={handleAddBlacklist} className="space-y-4">
+              {modalError && (
+                <div className="px-4 py-2.5 bg-error-container text-on-error-container text-xs rounded-lg flex items-center justify-between border border-error/20">
+                  <span className="flex items-center gap-2 font-medium">
+                    <AlertTriangle className="h-4 w-4 text-error" /> {modalError}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setModalError(null)}
+                    className="p-1 hover:bg-error-container/20 rounded cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5 text-on-error-container" />
+                  </button>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1">
                   Mã định danh thẻ (UID)

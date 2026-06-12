@@ -35,6 +35,8 @@ export default function CardsPage() {
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [selectedCard, setSelectedCard] = useState<TransportCard | null>(null);
   const [isOffline, setIsOffline] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
 
   // Form State - Phát hành thẻ
   const [uid, setUid] = useState("");
@@ -53,14 +55,14 @@ export default function CardsPage() {
             id: c.id,
             uid: c.cardUid,
             passengerType: c.type === "IDENTIFIED" ? "STUDENT" : "NORMAL",
-            balance: 50000, // mock balance
+            balance: 50000,
             status: c.status || "ACTIVE",
             linkedTicket: c.linkedUserId ? "Vé liên kết" : null,
             createdAt: c.createdAt ? new Date(c.createdAt).toISOString().replace("T", " ").substring(0, 16) : ""
           })));
         }
       } catch (err: any) {
-        console.warn("FMC Cards API is offline. Running in mock fallback mode. Error:", err.message);
+        console.warn("FMC Cards API is offline.", err.message);
         setIsOffline(true);
       }
     }
@@ -71,6 +73,7 @@ export default function CardsPage() {
     setUid(generateRandomUid());
     setPassengerType("NORMAL");
     setBalance(50000);
+    setModalError(null);
     setIsModalOpen(true);
   };
 
@@ -85,6 +88,7 @@ export default function CardsPage() {
 
   const handleIssueCard = async (e: React.FormEvent) => {
     e.preventDefault();
+    setModalError(null);
     try {
       const newCard = await fetchApi("/api/cards", {
         method: "POST",
@@ -106,21 +110,12 @@ export default function CardsPage() {
         createdAt: newCard.createdAt ? new Date(newCard.createdAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16)
       };
       setCards([createdCard, ...cards]);
+      setIsModalOpen(false);
     } catch (err: any) {
-      console.warn("POST /api/cards failed, using mock local state. Error:", err.message);
+      console.warn("POST /api/cards failed. Error:", err.message);
       setIsOffline(true);
-      const fallbackCard: TransportCard = {
-        id: "c-" + Date.now(),
-        uid,
-        passengerType,
-        balance,
-        status: "ISSUED",
-        linkedTicket: null,
-        createdAt: new Date().toISOString().replace("T", " ").substring(0, 16)
-      };
-      setCards([fallbackCard, ...cards]);
+      setModalError("Lỗi kết nối tới Backend API. Không thể phát hành thẻ mới.");
     }
-    setIsModalOpen(false);
   };
 
   const handleAction = async (id: string, action: "ACTIVATE" | "SUSPEND" | "REVOKE") => {
@@ -132,7 +127,9 @@ export default function CardsPage() {
     else if (action === "SUSPEND") nextStatus = "SUSPENDED";
     else if (action === "REVOKE") nextStatus = "REVOKED";
 
+    const originalList = [...cards];
     setCards(cards.map((c) => (c.id === id ? { ...c, status: nextStatus } : c)));
+    setPageError(null);
 
     try {
       if (action === "REVOKE") {
@@ -147,8 +144,10 @@ export default function CardsPage() {
         }
       }
     } catch (err: any) {
-      console.warn("Card action API failed, using mock local state. Error:", err.message);
+      console.warn("Card action API failed. Error:", err.message);
       setIsOffline(true);
+      setCards(originalList);
+      setPageError("Lỗi kết nối tới Backend API. Không thể thực hiện thay đổi trạng thái thẻ " + card.uid + ".");
     }
   };
 
@@ -161,11 +160,13 @@ export default function CardsPage() {
   const handleLinkTicketSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedCard) {
+      const originalList = [...cards];
       setCards(
         cards.map((c) =>
           c.id === selectedCard.id ? { ...c, linkedTicket: ticketType, status: "ACTIVE" } : c
         )
       );
+      setPageError(null);
 
       try {
         const dummyTicketId = "11111111-1111-1111-1111-111111111111";
@@ -174,28 +175,36 @@ export default function CardsPage() {
           body: JSON.stringify({ ticketId: dummyTicketId })
         });
       } catch (err: any) {
-        console.warn("Link ticket API failed, using mock local state. Error:", err.message);
+        console.warn("Link ticket API failed. Error:", err.message);
         setIsOffline(true);
+        setCards(originalList);
+        setPageError("Lỗi kết nối tới Backend API. Không thể liên kết vé vào thẻ " + selectedCard.uid + ".");
       }
     }
     setIsLinkModalOpen(false);
   };
 
   const handleUnlinkTicket = async (id: string) => {
+    const card = cards.find(c => c.id === id);
+    const cardUid = card ? card.uid : "";
     if (confirm("Bạn có chắc chắn muốn hủy liên kết vé khỏi thẻ này?")) {
+      const originalList = [...cards];
       setCards(
         cards.map((c) =>
           c.id === id ? { ...c, linkedTicket: null } : c
         )
       );
+      setPageError(null);
 
       try {
         await fetchApi("/api/cards/" + id + "/unlink-ticket", {
           method: "POST"
         });
       } catch (err: any) {
-        console.warn("Unlink ticket API failed, using mock local state. Error:", err.message);
+        console.warn("Unlink ticket API failed. Error:", err.message);
         setIsOffline(true);
+        setCards(originalList);
+        setPageError("Lỗi kết nối tới Backend API. Không thể hủy liên kết vé khỏi thẻ " + cardUid + ".");
       }
     }
   };
@@ -210,12 +219,27 @@ export default function CardsPage() {
   return (
     <div className="space-y-6">
       {isOffline && (
-        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20">
           <span className="flex items-center gap-2 font-medium">
-            <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
+            <AlertTriangle className="h-4 w-4 text-error" /> Lỗi kết nối tới Backend API. Một số dữ liệu thống kê sẽ hiển thị mặc định bằng 0.
           </span>
         </div>
       )}    
+
+      {pageError && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4 text-error" /> {pageError}
+          </span>
+          <button
+            onClick={() => setPageError(null)}
+            className="p-1 hover:bg-error-container/20 rounded cursor-pointer"
+          >
+            <X className="h-3.5 w-3.5 text-on-error-container" />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -240,25 +264,33 @@ export default function CardsPage() {
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Tổng số thẻ hệ thống
           </h3>
-          <div className="text-3xl font-bold text-on-surface">1,254,580</div>
+          <div className="text-3xl font-bold text-on-surface">
+            {cards.length.toLocaleString()}
+          </div>
         </div>
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Hoạt động (Active)
           </h3>
-          <div className="text-3xl font-bold text-tertiary-fixed-dim">1,200,450</div>
+          <div className="text-3xl font-bold text-tertiary-fixed-dim">
+            {cards.filter((c) => c.status === "ACTIVE").length.toLocaleString()}
+          </div>
         </div>
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Tạm dừng (Suspended)
           </h3>
-          <div className="text-3xl font-bold text-secondary-fixed-dim">45,200</div>
+          <div className="text-3xl font-bold text-secondary-fixed-dim">
+            {cards.filter((c) => c.status === "SUSPENDED").length.toLocaleString()}
+          </div>
         </div>
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Danh sách đen (Blacklisted)
           </h3>
-          <div className="text-3xl font-bold text-error">8,930</div>
+          <div className="text-3xl font-bold text-error">
+            {cards.filter((c) => c.status === "REVOKED").length.toLocaleString()}
+          </div>
         </div>
       </div>
 
@@ -464,6 +496,20 @@ export default function CardsPage() {
             </div>
 
             <form onSubmit={handleIssueCard} className="space-y-4">
+              {modalError && (
+                <div className="px-4 py-2.5 bg-error-container text-on-error-container text-xs rounded-lg flex items-center justify-between border border-error/20">
+                  <span className="flex items-center gap-2 font-medium">
+                    <AlertTriangle className="h-4 w-4 text-error" /> {modalError}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setModalError(null)}
+                    className="p-1 hover:bg-error-container/20 rounded cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5 text-on-error-container" />
+                  </button>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1">
                   Mã thẻ định danh (UID)

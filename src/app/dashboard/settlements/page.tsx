@@ -309,34 +309,7 @@ export default function SettlementsPage() {
     setIsConfirmLockOpen(false);
   };
 
-  const handleUnlockPeriod = (periodStr: string) => {
-    setPeriods(
-      periods.map((p) =>
-        p.period === periodStr ? { ...p, status: "OPEN" } : p
-      )
-    );
-    
-    if (operatorShares[periodStr]) {
-      setOperatorShares({
-        ...operatorShares,
-        [periodStr]: operatorShares[periodStr].map((s) => ({
-          ...s,
-          status: "PENDING"
-        }))
-      });
-    }
 
-    const newLog = {
-      id: 'log-' + Date.now(),
-      timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
-      period: periodStr,
-      action: "Mở khóa sổ quyết toán",
-      status: "WARNING" as const,
-      details: "Kỳ quyết toán Tháng " + periodStr.substring(5) + "/" + periodStr.substring(0, 4) + " đã được mở khóa để đối soát lại dữ liệu.",
-      performedBy: "Hệ thống"
-    };
-    setLogs([newLog, ...logs]);
-  };
 
   const handleConfirmPaid = (operatorCode: string) => {
     if (operatorShares[selectedPeriod]) {
@@ -444,19 +417,12 @@ export default function SettlementsPage() {
             </span>
           </span>
 
-          {activePeriodInfo.status === "OPEN" ? (
+          {activePeriodInfo.status === "OPEN" && (
             <button
               onClick={() => setIsConfirmLockOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-error-container text-on-error-container hover:bg-error-container/80 rounded text-xs font-semibold uppercase cursor-pointer"
             >
               <Lock className="h-3.5 w-3.5" /> Khóa sổ kỳ này
-            </button>
-          ) : (
-            <button
-              onClick={() => handleUnlockPeriod(activePeriodInfo.period)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant hover:bg-tertiary-fixed-dim/30 rounded text-xs font-semibold uppercase cursor-pointer"
-            >
-              <Unlock className="h-3.5 w-3.5" /> Mở khóa sửa đổi
             </button>
           )}
         </div>

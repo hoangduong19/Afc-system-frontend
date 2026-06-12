@@ -18,7 +18,7 @@ interface Operator {
   id: string;
   code: string;
   name: string;
-  status: "ACTIVE" | "DEACTIVE";
+  status: "ACTIVE" | "INACTIVE";
   createdAt: string;
   routesCount: number;
 }
@@ -32,11 +32,13 @@ export default function OperatorsPage() {
   const [modalMode, setModalMode] = useState<"CREATE" | "EDIT">("CREATE");
   const [selectedOperator, setSelectedOperator] = useState<Operator | null>(null);
   const [isOffline, setIsOffline] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
 
   // Form State
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [status, setStatus] = useState<"ACTIVE" | "DEACTIVE">("ACTIVE");
+  const [status, setStatus] = useState<"ACTIVE" | "INACTIVE">("ACTIVE");
 
   useEffect(() => {
     async function loadOperators() {
@@ -47,13 +49,13 @@ export default function OperatorsPage() {
             id: o.id,
             code: o.code,
             name: o.name,
-            status: o.status || "ACTIVE",
+            status: o.status === "INACTIVE" ? "INACTIVE" : "ACTIVE",
             createdAt: o.createdAt ? new Date(o.createdAt).toISOString().replace("T", " ").substring(0, 16) : "",
             routesCount: o.routesCount || 0
           })));
         }
       } catch (err: any) {
-        console.warn("FMC Operators API is offline. Running in mock fallback mode. Error:", err.message);
+        console.warn("FMC Operators API is offline.", err.message);
         setIsOffline(true);
       }
     }
@@ -65,6 +67,7 @@ export default function OperatorsPage() {
     setCode("");
     setName("");
     setStatus("ACTIVE");
+    setModalError(null);
     setIsModalOpen(true);
   };
 
@@ -74,34 +77,40 @@ export default function OperatorsPage() {
     setCode(op.code);
     setName(op.name);
     setStatus(op.status);
+    setModalError(null);
     setIsModalOpen(true);
   };
 
   const handleToggleStatus = async (id: string) => {
     const operatorToToggle = operators.find(o => o.id === id);
     if (!operatorToToggle) return;
-    
-    const newStatus = operatorToToggle.status === "ACTIVE" ? "DEACTIVE" : "ACTIVE";
+
+    const newStatus = operatorToToggle.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    const originalList = [...operators];
     setOperators(
       operators.map((op) =>
         op.id === id ? { ...op, status: newStatus } : op
       )
     );
-    
+    setPageError(null);
+
     try {
-      if (newStatus === "DEACTIVE") {
+      if (newStatus === "INACTIVE") {
         await fetchApi(`/api/operators/${id}/deactivate`, { method: "PATCH" });
-      } else {
-        console.warn("No activation endpoint, toggled locally");
+      } else if (newStatus === "ACTIVE") {
+        await fetchApi(`/api/operators/${id}/activate`, { method: "PATCH" });
       }
     } catch (err: any) {
-      console.warn("Backend toggle operator status failed, using mock local state. Error:", err.message);
+      console.warn("Backend toggle operator status failed. Error:", err.message);
+      setOperators(originalList);
       setIsOffline(true);
+      setPageError(`Lỗi hệ thống: ${err.message || "Không thể thay đổi trạng thái nhà vận hành."}`);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setModalError(null);
     if (modalMode === "CREATE") {
       try {
         const newOp = await fetchApi("/api/operators", {
@@ -116,18 +125,11 @@ export default function OperatorsPage() {
           createdAt: newOp.createdAt ? new Date(newOp.createdAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16),
           routesCount: 0
         }]);
+        setIsModalOpen(false);
       } catch (err: any) {
-        console.warn("POST /api/operators failed, falling back to local creation. Error:", err.message);
+        console.warn("POST /api/operators failed. Error:", err.message);
         setIsOffline(true);
-        const fallbackOp: Operator = {
-          id: `op-${Date.now()}`,
-          code,
-          name,
-          status,
-          createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-          routesCount: 0
-        };
-        setOperators([...operators, fallbackOp]);
+        setModalError(`Lỗi hệ thống: ${err.message || "Không thể tạo nhà vận hành."}`);
       }
     } else if (modalMode === "EDIT" && selectedOperator) {
       try {
@@ -140,17 +142,13 @@ export default function OperatorsPage() {
             op.id === selectedOperator.id ? { ...op, name: updatedOp.name || name } : op
           )
         );
+        setIsModalOpen(false);
       } catch (err: any) {
-        console.warn("PUT /api/operators failed, falling back to local update. Error:", err.message);
+        console.warn("PUT /api/operators failed. Error:", err.message);
         setIsOffline(true);
-        setOperators(
-          operators.map((op) =>
-            op.id === selectedOperator.id ? { ...op, name } : op
-          )
-        );
+        setModalError(`Lỗi hệ thống: ${err.message || "Không thể cập nhật nhà vận hành."}`);
       }
     }
-    setIsModalOpen(false);
   };
 
   const filteredOperators = operators.filter((op) => {
@@ -164,10 +162,24 @@ export default function OperatorsPage() {
   return (
     <div className="space-y-6">
       {isOffline && (
-        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20 animate-pulse">
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20">
           <span className="flex items-center gap-2 font-medium">
-            <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
+            <AlertTriangle className="h-4 w-4 text-error" /> Lỗi kết nối tới Backend API. Một số dữ liệu thống kê sẽ hiển thị mặc định bằng 0.
           </span>
+        </div>
+      )}
+
+      {pageError && (
+        <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20">
+          <span className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="h-4 w-4 text-error" /> {pageError}
+          </span>
+          <button
+            onClick={() => setPageError(null)}
+            className="p-1 hover:bg-error-container/20 rounded cursor-pointer"
+          >
+            <X className="h-3.5 w-3.5 text-on-error-container" />
+          </button>
         </div>
       )}
 
@@ -210,7 +222,7 @@ export default function OperatorsPage() {
             Tạm dừng hoạt động
           </h3>
           <div className="text-3xl font-bold text-error">
-            {operators.filter((op) => op.status === "DEACTIVE").length}
+            {operators.filter((op) => op.status === "INACTIVE").length}
           </div>
         </div>
       </div>
@@ -236,7 +248,7 @@ export default function OperatorsPage() {
           >
             <option value="ALL">Tất cả trạng thái</option>
             <option value="ACTIVE">Hoạt động</option>
-            <option value="DEACTIVE">Tạm khóa</option>
+            <option value="INACTIVE">Tạm khóa</option>
           </select>
         </div>
       </div>
@@ -288,11 +300,10 @@ export default function OperatorsPage() {
                     </td>
                     <td className="p-table-cell-padding">
                       <span
-                        className={`px-2.5 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${
-                          op.status === "ACTIVE"
+                        className={`px-2.5 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${op.status === "ACTIVE"
                             ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
                             : "bg-error-container text-on-error-container"
-                        }`}
+                          }`}
                       >
                         {op.status === "ACTIVE" ? (
                           <>
@@ -316,11 +327,10 @@ export default function OperatorsPage() {
                         </button>
                         <button
                           onClick={() => handleToggleStatus(op.id)}
-                          className={`p-1 hover:bg-surface-container-high rounded transition-colors cursor-pointer ${
-                            op.status === "ACTIVE"
+                          className={`p-1 hover:bg-surface-container-high rounded transition-colors cursor-pointer ${op.status === "ACTIVE"
                               ? "text-error hover:bg-error-container/20"
                               : "text-tertiary-fixed-dim hover:bg-tertiary-fixed-dim/20"
-                          }`}
+                            }`}
                           title={op.status === "ACTIVE" ? "Khóa" : "Kích hoạt"}
                         >
                           <Power className="h-4 w-4" />
@@ -349,7 +359,7 @@ export default function OperatorsPage() {
             className="fixed inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setIsModalOpen(false)}
           />
-          
+
           {/* Dialog Container */}
           <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl w-full max-w-md p-6 z-10">
             <div className="flex justify-between items-center pb-3 border-b border-outline-variant mb-4">
@@ -365,6 +375,20 @@ export default function OperatorsPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {modalError && (
+                <div className="px-4 py-2.5 bg-error-container text-on-error-container text-xs rounded-lg flex items-center justify-between border border-error/20">
+                  <span className="flex items-center gap-2 font-medium">
+                    <AlertTriangle className="h-4 w-4 text-error" /> {modalError}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setModalError(null)}
+                    className="p-1 hover:bg-error-container/20 rounded cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5 text-on-error-container" />
+                  </button>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1">
                   Mã nhà vận hành
@@ -400,11 +424,11 @@ export default function OperatorsPage() {
                 </label>
                 <select
                   value={status}
-                  onChange={(e) => setStatus(e.target.value as "ACTIVE" | "DEACTIVE")}
+                  onChange={(e) => setStatus(e.target.value as "ACTIVE" | "INACTIVE")}
                   className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
                 >
                   <option value="ACTIVE">Hoạt động</option>
-                  <option value="DEACTIVE">Tạm khóa</option>
+                  <option value="INACTIVE">Tạm khóa</option>
                 </select>
               </div>
 

@@ -31,6 +31,7 @@ interface SettlementPeriod {
   status: "LOCKED" | "OPEN" | "RECONCILING";
   lastReconciledAt: string;
   reconciledBy: string;
+  reconciliationStatus?: "MATCH" | "WARNING" | "MISMATCH";
 }
 
 interface OperatorShare {
@@ -42,6 +43,8 @@ interface OperatorShare {
   actualShare: number;
   roundingAdjustment: number;
   status: "PENDING" | "CONFIRMED" | "PAID";
+  directShare: number;
+  proportionalShare: number;
 }
 
 interface ReconciliationLog {
@@ -55,11 +58,7 @@ interface ReconciliationLog {
 }
 
 const formatMoney = (amount: number) => {
-  const hasDecimals = Math.abs(amount) % 1 >= 0.005;
-  return amount.toLocaleString("en-US", {
-    minimumFractionDigits: hasDecimals ? 2 : 0,
-    maximumFractionDigits: 2
-  });
+  return Math.round(amount).toLocaleString("en-US");
 };
 
 const translateSettlementError = (errorMsg: string): string => {
@@ -90,16 +89,16 @@ const translateSettlementError = (errorMsg: string): string => {
 };
 
 export default function SettlementsPage() {
-  const [periods, setPeriods] = useState<SettlementPeriod[]>([]);
-
+  const [rawSettlements, setRawSettlements] = useState<any[]>([]);
+  const [operatorsList, setOperatorsList] = useState<any[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<string>("");
   const [isOffline, setIsOffline] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // Operator shares data mapped by period
-  const [operatorShares, setOperatorShares] = useState<Record<string, OperatorShare[]>>({});
+  // Local tracking for paid status of operators per period
+  const [paidShares, setPaidShares] = useState<Record<string, string[]>>({});
 
   // Logs data
   const [logs, setLogs] = useState<ReconciliationLog[]>([]);
@@ -112,43 +111,83 @@ export default function SettlementsPage() {
   const [selectedUploadPeriod, setSelectedUploadPeriod] = useState("2026-06");
   const [dragActive, setDragActive] = useState(false);
 
-  // Load Settlements from API on mount
+  // Compute periods from raw settlements
+  const periods = React.useMemo<SettlementPeriod[]>(() => {
+    return rawSettlements.map((s: any) => {
+      const expectedRevenue = s.totalExpected ?? 0;
+      const actualRevenue = s.totalActual ?? 0;
+      const discrepancy = s.diffAmount !== undefined && s.diffAmount !== null ? s.diffAmount : (expectedRevenue - actualRevenue);
+      return {
+        id: s.settlementId,
+        period: s.period,
+        expectedRevenue,
+        actualRevenue,
+        discrepancy,
+        status: (s.status === "CONFIRMED" || s.status === "LOCKED" ? "LOCKED" : "OPEN") as SettlementPeriod["status"],
+        lastReconciledAt: s.ranAt ? new Date(s.ranAt).toISOString().replace("T", " ").substring(0, 16) : "",
+        reconciledBy: s.ranBy || "Hệ thống",
+        reconciliationStatus: s.reconciliationStatus || "MATCH"
+      };
+    });
+  }, [rawSettlements]);
+
+  // Compute operator shares mapping dynamically
+  const operatorShares = React.useMemo<Record<string, OperatorShare[]>>(() => {
+    const sharesMap: Record<string, OperatorShare[]> = {};
+    rawSettlements.forEach((s: any) => {
+      const sharesList = s.companyShares ?? [];
+      if (Array.isArray(sharesList)) {
+        sharesMap[s.period] = sharesList.map((cs: any) => {
+          const opId = cs.operatorId;
+          const opCode = cs.operatorCode;
+          let matched = operatorsList.find(o => o.id === opId || o.code === opCode);
+          if (!matched && opId) {
+            if (opId === "op-1") matched = { code: "HURC", name: "Công ty Đường sắt Đô thị Hà Nội" };
+            else if (opId === "op-2") matched = { code: "TRANSERCO", name: "Tổng công ty Vận tải Hà Nội" };
+          }
+          const code = matched?.code || opCode || opId || "N/A";
+          const name = matched?.name || (opCode === "HURC" ? "Công ty Đường sắt Đô thị Hà Nội" : opCode === "TRANSERCO" ? "Tổng công ty Vận tải Hà Nội" : "Đơn vị vận hành khác");
+
+          return {
+            operatorCode: code,
+            operatorName: name,
+            totalKm: cs.totalKm || 0,
+            totalTrips: cs.totalTrips || 0,
+            expectedShare: cs.expectedRevenue || 0,
+            actualShare: cs.shareAmount || 0,
+            roundingAdjustment: cs.roundingAdjustment || 0,
+            status: (paidShares[s.period]?.includes(code)
+              ? "PAID"
+              : (s.status === "CONFIRMED" || s.status === "LOCKED" ? "CONFIRMED" : "PENDING")) as OperatorShare["status"],
+            directShare: cs.directShare ?? cs.directRevenue ?? cs.directShareAmount ?? 0,
+            proportionalShare: cs.proportionalShare ?? cs.proportionalRevenue ?? cs.proportionalShareAmount ?? 0
+          };
+        });
+      }
+    });
+    return sharesMap;
+  }, [rawSettlements, operatorsList, paidShares]);
+
+  // Load Settlements and Operators from API on mount
   useEffect(() => {
-    async function loadSettlements() {
+    async function loadData() {
       try {
-        const data = await fetchApi("/api/settlements");
-        if (Array.isArray(data)) {
-          const fetchedPeriods: SettlementPeriod[] = data.map((s: any) => ({
-            id: s.settlementId,
-            period: s.period,
-            expectedRevenue: s.totalExpected || 0,
-            actualRevenue: s.totalActual || 0,
-            discrepancy: (s.totalExpected || 0) - (s.totalActual || 0),
-            status: (s.status === "CONFIRMED" || s.status === "LOCKED" ? "LOCKED" : "OPEN") as SettlementPeriod["status"],
-            lastReconciledAt: s.ranAt ? new Date(s.ranAt).toISOString().replace("T", " ").substring(0, 16) : "",
-            reconciledBy: s.ranBy || "Hệ thống"
-          }));
+        const [settlementsData, operatorsData] = await Promise.all([
+          fetchApi("/api/settlements"),
+          fetchApi("/api/operators").catch(err => {
+            console.warn("Failed to load operators list:", err);
+            return [];
+          })
+        ]);
 
-          const sharesMap: Record<string, OperatorShare[]> = {};
-          data.forEach((s: any) => {
-            if (Array.isArray(s.companyShares)) {
-              sharesMap[s.period] = s.companyShares.map((cs: any) => ({
-                operatorCode: cs.operatorCode || "",
-                operatorName: cs.operatorCode === "HURC" ? "Công ty Đường sắt Đô thị Hà Nội" : "Tổng công ty Vận tải Hà Nội",
-                totalKm: cs.totalKm || 0,
-                totalTrips: cs.totalTrips || 0,
-                expectedShare: cs.expectedRevenue || 0,
-                actualShare: cs.shareAmount || 0,
-                roundingAdjustment: cs.roundingAdjustment || 0,
-                status: (s.status === "CONFIRMED" || s.status === "LOCKED" ? "CONFIRMED" : "PENDING") as OperatorShare["status"]
-              }));
-            }
-          });
+        if (Array.isArray(operatorsData)) {
+          setOperatorsList(operatorsData);
+        }
 
-          setPeriods(fetchedPeriods);
-          setOperatorShares(sharesMap);
-          if (fetchedPeriods.length > 0) {
-            setSelectedPeriod(fetchedPeriods[0].period);
+        if (Array.isArray(settlementsData)) {
+          setRawSettlements(settlementsData);
+          if (settlementsData.length > 0) {
+            setSelectedPeriod(settlementsData[0].period);
           }
         }
       } catch (err: any) {
@@ -158,7 +197,7 @@ export default function SettlementsPage() {
         setPageError(`Không thể tải dữ liệu quyết toán từ máy chủ API: ${translatedMsg}`);
       }
     }
-    loadSettlements();
+    loadData();
   }, []);
 
   // Stats calculation for active period
@@ -233,33 +272,7 @@ export default function SettlementsPage() {
         body: JSON.stringify({ year, month })
       });
 
-      const newPeriod: SettlementPeriod = {
-        id: s.settlementId,
-        period: s.period,
-        expectedRevenue: s.totalExpected || 0,
-        actualRevenue: s.totalActual || 0,
-        discrepancy: (s.totalExpected || 0) - (s.totalActual || 0),
-        status: s.status === "CONFIRMED" || s.status === "LOCKED" ? "LOCKED" as const : "OPEN" as const,
-        lastReconciledAt: s.ranAt ? new Date(s.ranAt).toISOString().replace("T", " ").substring(0, 16) : "",
-        reconciledBy: s.ranBy || "Hệ thống"
-      };
-
-      const newShares = s.companyShares ? s.companyShares.map((cs: any) => ({
-        operatorCode: cs.operatorCode || "",
-        operatorName: cs.operatorCode === "HURC" ? "Công ty Đường sắt Đô thị Hà Nội" : "Tổng công ty Vận tải Hà Nội",
-        totalKm: cs.totalKm || 0,
-        totalTrips: cs.totalTrips || 0,
-        expectedShare: cs.expectedRevenue || 0,
-        actualShare: cs.shareAmount || 0,
-        roundingAdjustment: cs.roundingAdjustment || 0,
-        status: s.status === "CONFIRMED" || s.status === "LOCKED" ? "CONFIRMED" as const : "PENDING" as const
-      })) : [];
-
-      setPeriods(prev => [newPeriod, ...prev.filter(p => p.period !== selectedUploadPeriod)]);
-      setOperatorShares(prev => ({
-        ...prev,
-        [selectedUploadPeriod]: newShares
-      }));
+      setRawSettlements(prev => [s, ...prev.filter(p => p.period !== selectedUploadPeriod)]);
       setSelectedPeriod(selectedUploadPeriod);
       setSelectedFile(null);
       setIsReconcileModalOpen(false);
@@ -276,15 +289,9 @@ export default function SettlementsPage() {
     if (!activePeriodInfo || !activePeriodInfo.id) return;
 
     const updater = () => {
-      setPeriods(prev =>
-        prev.map((p) => (p.period === selectedPeriod ? { ...p, status: "LOCKED" } : p))
+      setRawSettlements(prev =>
+        prev.map((p) => (p.settlementId === activePeriodInfo.id ? { ...p, status: "CONFIRMED" } : p))
       );
-      if (operatorShares[selectedPeriod]) {
-        setOperatorShares(prev => ({
-          ...prev,
-          [selectedPeriod]: prev[selectedPeriod].map((s) => ({ ...s, status: "CONFIRMED" }))
-        }));
-      }
     };
 
     try {
@@ -312,25 +319,25 @@ export default function SettlementsPage() {
 
 
   const handleConfirmPaid = (operatorCode: string) => {
-    if (operatorShares[selectedPeriod]) {
-      setOperatorShares({
-        ...operatorShares,
-        [selectedPeriod]: operatorShares[selectedPeriod].map((s) =>
-          s.operatorCode === operatorCode ? { ...s, status: "PAID" } : s
-        )
-      });
-
-      const newLog = {
-        id: 'log-' + Date.now(),
-        timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
-        period: selectedPeriod,
-        action: "Thanh toán phân chia",
-        status: "SUCCESS" as const,
-        details: "Đã cập nhật trạng thái đã thanh toán cho nhà vận hành " + operatorCode + " trong kỳ quyết toán " + selectedPeriod + ".",
-        performedBy: "Hệ thống"
+    setPaidShares(prev => {
+      const current = prev[selectedPeriod] || [];
+      if (current.includes(operatorCode)) return prev;
+      return {
+        ...prev,
+        [selectedPeriod]: [...current, operatorCode]
       };
-      setLogs([newLog, ...logs]);
-    }
+    });
+
+    const newLog = {
+      id: 'log-' + Date.now(),
+      timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
+      period: selectedPeriod,
+      action: "Thanh toán phân chia",
+      status: "SUCCESS" as const,
+      details: "Đã cập nhật trạng thái đã thanh toán cho nhà vận hành " + operatorCode + " trong kỳ quyết toán " + selectedPeriod + ".",
+      performedBy: "Hệ thống"
+    };
+    setLogs(prev => [newLog, ...prev]);
   };
 
   return (
@@ -451,30 +458,47 @@ export default function SettlementsPage() {
         </div>
 
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm relative overflow-hidden group">
-          <h3 className="font-label-caps text-[11px] text-on-surface-variant uppercase mb-1">
-            Chênh lệch đối soát
+          <h3 className="font-label-caps text-[11px] text-on-surface-variant uppercase mb-1 flex justify-between items-center">
+            <span>Chênh lệch đối soát</span>
+            {activePeriodInfo.reconciliationStatus && (
+              <span
+                className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-bold ${
+                  activePeriodInfo.reconciliationStatus === "MATCH"
+                    ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
+                    : activePeriodInfo.reconciliationStatus === "WARNING"
+                    ? "bg-warning/20 text-secondary"
+                    : "bg-error-container text-on-error-container animate-pulse"
+                }`}
+              >
+                {activePeriodInfo.reconciliationStatus === "MATCH"
+                  ? "KHỚP"
+                  : activePeriodInfo.reconciliationStatus === "WARNING"
+                  ? "CẢNH BÁO"
+                  : "SAI LỆCH"}
+              </span>
+            )}
           </h3>
           <div
             className={`text-2xl font-bold font-data-mono flex items-center gap-1 ${
-              Math.abs(activePeriodInfo.discrepancy) < 0.001
+              activePeriodInfo.reconciliationStatus === "MATCH"
                 ? "text-tertiary-fixed-dim"
-                : Math.abs(activePeriodInfo.discrepancy) <= 1.0
-                ? "text-outline-variant"
+                : activePeriodInfo.reconciliationStatus === "WARNING"
+                ? "text-secondary"
                 : "text-error"
             }`}
           >
             {activePeriodInfo.discrepancy > 0 ? "+" : ""}
             ₫ {formatMoney(activePeriodInfo.discrepancy)}
-            {Math.abs(activePeriodInfo.discrepancy) >= 0.001 && (
+            {activePeriodInfo.reconciliationStatus !== "MATCH" && (
               <AlertTriangle className="h-4 w-4 ml-1 animate-pulse" />
             )}
           </div>
           <p className="text-[11px] text-on-surface-variant mt-1">
-            {Math.abs(activePeriodInfo.discrepancy) < 0.001
+            {activePeriodInfo.reconciliationStatus === "MATCH"
               ? "Hoàn hảo, không sai lệch"
-              : Math.abs(activePeriodInfo.discrepancy) <= 1.0
-              ? "Sai lệch nhỏ do làm tròn số phân chia"
-              : `Lệch ${((Math.abs(activePeriodInfo.discrepancy) / (activePeriodInfo.expectedRevenue || 1)) * 100).toFixed(3)}% tổng thu`}
+              : activePeriodInfo.reconciliationStatus === "WARNING"
+              ? "Sai lệch nhỏ trong ngưỡng dung sai"
+              : `Lệch vượt ngưỡng ${((Math.abs(activePeriodInfo.discrepancy) / (activePeriodInfo.expectedRevenue || 1)) * 100).toFixed(3)}%`}
           </p>
         </div>
 
@@ -491,20 +515,27 @@ export default function SettlementsPage() {
         </div>
       </div>
 
-      {/* Main Grid: Operators Share Table & Details */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-grid-gutter">
-        {/* Operators Revenue Share Table */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden flex flex-col col-span-1 lg:col-span-2">
-          <div className="p-4 border-b border-outline-variant bg-surface-container-low flex justify-between items-center">
-            <div>
-              <h3 className="font-bold text-on-surface flex items-center gap-2 text-sm">
-                <FileSpreadsheet className="h-4 w-4 text-secondary" /> Bảng phân chia doanh thu nhà vận hành
-              </h3>
-              <p className="text-xs text-on-surface-variant">
-                Quyết toán dựa trên quãng đường (KM) chạy thực tế và lượng khách đi (Trips)
-              </p>
-            </div>
+      {/* Operators Revenue Share Table */}
+      <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden flex flex-col w-full">
+        <div className="p-4 border-b border-outline-variant bg-surface-container-low flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <div>
+            <h3 className="font-bold text-on-surface flex items-center gap-2 text-sm">
+              <FileSpreadsheet className="h-4 w-4 text-secondary" /> Bảng phân chia doanh thu nhà vận hành
+            </h3>
+            <p className="text-xs text-on-surface-variant">
+              Quyết toán dựa trên quãng đường (KM) chạy thực tế và lượng khách đi (Trips)
+            </p>
           </div>
+          {activePeriodInfo.period !== "N/A" && (
+            <div className="text-[11px] text-on-surface-variant bg-surface-container-high px-3 py-1.5 rounded-lg border border-outline-variant">
+              <span className="font-semibold text-on-surface">Kiểm toán: </span>
+              <span>{activePeriodInfo.reconciledBy}</span>
+              {activePeriodInfo.lastReconciledAt && (
+                <span className="text-outline"> | Cập nhật: {activePeriodInfo.lastReconciledAt}</span>
+              )}
+            </div>
+          )}
+        </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -518,6 +549,12 @@ export default function SettlementsPage() {
                   </th>
                   <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
                     Tổng lượt (Trips)
+                  </th>
+                  <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
+                    Phân chia trực tiếp
+                  </th>
+                  <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
+                    Phân chia theo Tỷ lệ 
                   </th>
                   <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
                     Số tiền phân chia
@@ -546,19 +583,29 @@ export default function SettlementsPage() {
                           {share.operatorName}
                         </div>
                       </td>
-                      <td className="p-table-cell-padding text-right font-data-mono text-on-surface-variant">
-                        {share.totalKm.toLocaleString()} km
+                      <td className="p-table-cell-padding text-right font-medium text-on-surface text-sm">
+                        {share.totalKm.toLocaleString(undefined, { minimumFractionDigits: 1 })} km
                       </td>
-                      <td className="p-table-cell-padding text-right font-data-mono text-on-surface-variant">
+                      <td className="p-table-cell-padding text-right font-medium text-on-surface text-sm">
                         {share.totalTrips.toLocaleString()}
                       </td>
-                      <td className="p-table-cell-padding text-right font-data-mono font-semibold text-secondary-fixed-dim">
+                      <td className="p-table-cell-padding text-right font-semibold text-on-surface text-sm">
+                        {share.directShare > 0
+                          ? `₫ ${formatMoney(share.directShare)}`
+                          : <span className="text-outline-variant">—</span>}
+                      </td>
+                      <td className="p-table-cell-padding text-right font-semibold text-secondary text-sm">
+                        {share.proportionalShare > 0
+                          ? `₫ ${formatMoney(share.proportionalShare)}`
+                          : <span className="text-outline-variant">—</span>}
+                      </td>
+                      <td className="p-table-cell-padding text-right font-bold text-on-surface text-sm">
                         ₫ {formatMoney(share.actualShare)}
                       </td>
-                      <td className="p-table-cell-padding text-right font-data-mono text-error">
+                      <td className="p-table-cell-padding text-right font-medium text-error text-sm">
                         {share.roundingAdjustment !== 0
                           ? `₫ ${formatMoney(share.roundingAdjustment)}`
-                          : "—"}
+                          : <span className="text-outline-variant">—</span>}
                       </td>
                       <td className="p-table-cell-padding">
                         <span
@@ -603,7 +650,7 @@ export default function SettlementsPage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-on-surface-variant font-medium">
+                    <td colSpan={9} className="p-8 text-center text-on-surface-variant font-medium">
                       Chưa có bảng phân chia tỷ lệ cho kỳ này.
                     </td>
                   </tr>
@@ -612,39 +659,6 @@ export default function SettlementsPage() {
             </table>
           </div>
         </div>
-
-        {/* Dynamic Formula Info */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm space-y-4 flex flex-col justify-between">
-          <div>
-            <h3 className="font-bold text-on-surface text-sm flex items-center gap-2 pb-2 border-b border-outline-variant">
-              <Info className="h-4 w-4 text-secondary" /> Công thức phân chia
-            </h3>
-            <div className="space-y-3 mt-4 text-xs text-on-surface-variant">
-              <p>
-                Phân chia doanh thu liên thông FMC tuân thủ quy định tại Quyết định số 450/QĐ-FMC:
-              </p>
-              <div className="bg-surface-container-low p-3 rounded border border-outline-variant font-data-mono space-y-1 text-on-surface">
-                <div className="font-semibold text-secondary-fixed-dim">Tỷ lệ share = 0.6 * A + 0.4 * B</div>
-                <div>Trong đó:</div>
-                <div className="text-[11px]">- A: Tỷ lệ khách đi (Trips) của nhà xe</div>
-                <div className="text-[11px]">- B: Tỷ lệ tổng số KM luân chuyển</div>
-              </div>
-              <p className="text-[11px] italic">
-                * Chênh lệch (nếu có) được bù trừ vào quỹ dự phòng và điều chỉnh kỹ thuật làm tròn hàng tháng.
-              </p>
-            </div>
-          </div>
-          
-          <div className="bg-surface-container-high border border-outline-variant rounded-lg p-3 space-y-2">
-            <h4 className="font-bold text-xs text-on-surface">Báo cáo kiểm toán kỳ này</h4>
-            <p className="text-[11px] text-on-surface-variant">
-              Kỳ đối soát: <strong className="text-on-surface font-data-mono">{selectedPeriod}</strong><br />
-              Lần đối soát cuối: <span className="font-data-mono">{activePeriodInfo.lastReconciledAt}</span><br />
-              Thực hiện bởi: <span className="text-secondary font-medium">{activePeriodInfo.reconciledBy}</span>
-            </p>
-          </div>
-        </div>
-      </div>
 
       {/* Reconciliation Log Audit Section */}
       <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden">

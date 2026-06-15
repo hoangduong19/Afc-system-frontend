@@ -19,7 +19,7 @@
   --color-outline: #76777d;
   --color-on-background: #191c1e;
   --color-error-container: #ffdad6;
-  --color-secondary-fixed-dim: #adc6ff;
+  --color-secondary-fixed-dim: #0058be;
   --color-secondary-fixed: #d8e2ff;
   --color-on-tertiary-fixed-variant: #005236;
   --color-primary-fixed-dim: #bec6e0;
@@ -45,7 +45,7 @@
   --color-primary-container: #131b2e;
   --color-surface: #f7f9fb;
   --color-on-primary-fixed-variant: #3f465c;
-  --color-tertiary-fixed-dim: #4edea3;
+  --color-tertiary-fixed-dim: #009668;
   --color-surface-container: #eceef0;
   --color-on-error: #ffffff;
   --color-on-error-container: #93000a;
@@ -65,7 +65,7 @@
   --spacing-topbar-height: 64px;
 
   /* Fonts */
-  --font-data-mono: var(--font-jetbrains-mono);
+  --font-data-mono: var(--font-inter);
   --font-body-md: var(--font-inter);
   --font-display: var(--font-inter);
   --font-label-caps: var(--font-inter);
@@ -77,7 +77,8 @@
 @utility text-data-mono {
   font-size: 13px;
   line-height: 18px;
-  font-weight: 450;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 @utility text-body-md {
   font-size: 14px;

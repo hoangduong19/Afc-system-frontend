@@ -128,7 +128,7 @@ export default function TransactionsPage() {
         </div>
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
-            Nợ cước phát sinh (Debt)
+            Nợ cước phát sinh
           </h3>
           <div className="text-3xl font-bold text-error font-data-mono">
             ₫ {transactions.reduce((acc, t) => acc + t.debtAmount, 0).toLocaleString()}
@@ -153,8 +153,8 @@ export default function TransactionsPage() {
             className="bg-surface-container-high border-none rounded-md py-1.5 px-3 font-body-sm text-body-sm text-on-surface outline-none cursor-pointer w-full md:w-40"
           >
             <option value="ALL">Tất cả vận hành</option>
-            <option value="HURC">HURC (Metro)</option>
-            <option value="TRANSERCO">TRANSERCO (Bus)</option>
+            <option value="HURC">HURC</option>
+            <option value="TRANSERCO">TRANSERCO</option>
           </select>
 
           <select
@@ -164,7 +164,7 @@ export default function TransactionsPage() {
           >
             <option value="ALL">Tất cả trạng thái</option>
             <option value="COMPLETED">Thành công</option>
-            <option value="DEBT">Nợ cước (Incomplete)</option>
+            <option value="DEBT">Nợ cước</option>
           </select>
         </div>
       </div>

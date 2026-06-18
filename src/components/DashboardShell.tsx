@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Building2,
@@ -27,8 +27,10 @@ import {
   Bell,
   User,
   Menu,
-  X
+  X,
+  LogOut
 } from "lucide-react";
+import { clearAuthTokens } from "@/lib/api";
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -36,7 +38,13 @@ interface DashboardShellProps {
 
 export default function DashboardShell({ children }: DashboardShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const handleLogout = () => {
+    clearAuthTokens();
+    router.push("/");
+  };
 
   const menuItems: { label: string; icon: any; url: string; disabled?: boolean }[] = [
     { label: "Tổng quan", icon: LayoutDashboard, url: "/dashboard" },
@@ -50,17 +58,12 @@ export default function DashboardShell({ children }: DashboardShellProps) {
     { label: "Quản lý Vé", icon: Ticket, url: "/dashboard/tickets" },
     { label: "Giao dịch", icon: Receipt, url: "/dashboard/transactions" },
     { label: "Cảnh báo bất thường", icon: AlertTriangle, url: "/dashboard/anomalies" },
-    { label: "Phân chia doanh thu", icon: Wallet, url: "/dashboard/revenue-share" },
+    { label: "Công thức phân bổ", icon: FileText, url: "/dashboard/revenue-share" },
     { label: "Quyết toán", icon: Coins, url: "/dashboard/settlements" },
     { label: "Đối soát", icon: Network, url: "/dashboard/settlements" },
-    { label: "Tích hợp", icon: Sliders, url: "/dashboard/integrations" },
-    { label: "Báo cáo", icon: FileText, url: "/dashboard/reports" },
   ];
 
-  const bottomMenuItems = [
-    { label: "Hỗ trợ", icon: HelpCircle, url: "#" },
-    { label: "Cài đặt", icon: Settings, url: "#" },
-  ];
+  const bottomMenuItems: any[] = [];
 
   return (
     <div className="dark bg-background text-on-background min-h-screen flex w-full font-body-md text-body-md antialiased overflow-x-hidden">
@@ -104,21 +107,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
           })}
         </div>
 
-        <div className="p-4 border-t border-outline-variant space-y-1">
-          {bottomMenuItems.map((item, idx) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={idx}
-                className="flex items-center px-3 py-2 text-on-primary-container hover:bg-on-primary-fixed-variant transition-all rounded-lg group"
-                href={item.url}
-              >
-                <Icon className="mr-3 h-5 w-5 text-on-primary-container group-hover:text-primary-fixed" />
-                <span className="font-label-caps text-label-caps">{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
+
       </aside>
 
       {/* --- MOBILE SIDEBAR DRAWER --- */}
@@ -168,22 +157,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
               })}
             </div>
 
-            <div className="pt-2 border-t border-outline-variant space-y-1">
-              {bottomMenuItems.map((item, idx) => {
-                const Icon = item.icon;
-                return (
-                  <Link
-                    key={idx}
-                    className="flex items-center px-3 py-2 text-on-primary-container hover:bg-on-primary-fixed-variant transition-all rounded-lg"
-                    href={item.url}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                  >
-                    <Icon className="mr-3 h-5 w-5" />
-                    <span className="font-label-caps text-label-caps">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
+
           </aside>
         </div>
       )}
@@ -203,31 +177,17 @@ export default function DashboardShell({ children }: DashboardShellProps) {
             <h2 className="font-headline-sm text-headline-sm font-bold text-on-surface-variant hidden md:block">
               Fare Management Center
             </h2>
-            {/* Navigation Links */}
-            <nav className="hidden lg:flex gap-6">
-              <a
-                className="text-outline hover:text-primary-fixed transition-colors font-label-caps text-label-caps uppercase text-xs"
-                href="#"
-              >
-                HURC
-              </a>
-              <a
-                className="text-outline hover:text-primary-fixed transition-colors font-label-caps text-label-caps uppercase text-xs"
-                href="#"
-              >
-                TRANSERCO
-              </a>
-            </nav>
           </div>
 
           <div className="flex items-center gap-3">
             {/* Actions */}
             <div className="flex items-center gap-1 border-l border-outline-variant pl-3 ml-1">
-              <button className="p-1.5 text-on-surface-variant hover:text-primary-fixed transition-colors rounded-full hover:bg-surface-container-high cursor-pointer">
-                <Bell className="h-5 w-5" />
-              </button>
-              <button className="p-1.5 text-on-surface-variant hover:text-primary-fixed transition-colors rounded-full hover:bg-surface-container-high cursor-pointer">
-                <User className="h-5 w-5" />
+              <button
+                onClick={handleLogout}
+                className="p-1.5 text-error hover:bg-error-container/20 hover:text-error transition-colors rounded-full cursor-pointer"
+                title="Đăng xuất"
+              >
+                <LogOut className="h-5 w-5" />
               </button>
             </div>
           </div>

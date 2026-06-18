@@ -50,6 +50,7 @@ export default function OperatorsPage() {
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [status, setStatus] = useState<"ACTIVE" | "INACTIVE">("ACTIVE");
+  const [mode, setMode] = useState<"METRO" | "BUS">("METRO");
 
   useEffect(() => {
     async function loadOperators() {
@@ -78,6 +79,7 @@ export default function OperatorsPage() {
     setCode("");
     setName("");
     setStatus("ACTIVE");
+    setMode("METRO");
     setModalError(null);
     setIsModalOpen(true);
   };
@@ -138,7 +140,7 @@ export default function OperatorsPage() {
       try {
         const newOp = await fetchApi("/api/operators", {
           method: "POST",
-          body: JSON.stringify({ code, name })
+          body: JSON.stringify({ code, name, mode })
         });
         setOperators([...operators, {
           id: newOp.id,
@@ -274,9 +276,6 @@ export default function OperatorsPage() {
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
                   Tên đầy đủ
                 </th>
-                <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
-                  Số tuyến quản lý
-                </th>
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
                   Ngày tạo
                 </th>
@@ -300,9 +299,6 @@ export default function OperatorsPage() {
                     </td>
                     <td className="p-table-cell-padding text-on-surface font-medium">
                       {op.name}
-                    </td>
-                    <td className="p-table-cell-padding text-right text-on-surface-variant font-data-mono font-semibold">
-                      {op.routesCount}
                     </td>
                     <td className="p-table-cell-padding text-on-surface-variant font-data-mono">
                       {op.createdAt}
@@ -350,7 +346,7 @@ export default function OperatorsPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-on-surface-variant font-medium">
+                  <td colSpan={5} className="p-8 text-center text-on-surface-variant font-medium">
                     Không tìm thấy nhà vận hành nào khớp điều kiện tìm kiếm.
                   </td>
                 </tr>
@@ -427,19 +423,37 @@ export default function OperatorsPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Trạng thái
-                </label>
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as "ACTIVE" | "INACTIVE")}
-                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
-                >
-                  <option value="ACTIVE">Hoạt động</option>
-                  <option value="INACTIVE">Tạm khóa</option>
-                </select>
-              </div>
+              {modalMode === "CREATE" && (
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                    Phương thức vận tải
+                  </label>
+                  <select
+                    value={mode}
+                    onChange={(e) => setMode(e.target.value as "METRO" | "BUS")}
+                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
+                  >
+                    <option value="METRO">Đường sắt</option>
+                    <option value="BUS">Xe buýt</option>
+                  </select>
+                </div>
+              )}
+
+              {modalMode === "CREATE" && (
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                    Trạng thái
+                  </label>
+                  <select
+                    value={status}
+                    onChange={(e) => setStatus(e.target.value as "ACTIVE" | "INACTIVE")}
+                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
+                  >
+                    <option value="ACTIVE">Hoạt động</option>
+                    <option value="INACTIVE">Tạm khóa</option>
+                  </select>
+                </div>
+              )}
 
               <div className="flex gap-3 justify-end pt-4">
                 <button

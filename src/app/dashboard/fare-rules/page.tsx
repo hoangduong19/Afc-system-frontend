@@ -14,6 +14,13 @@ import {
 } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 
+interface PassPrice {
+  durationType: "DAILY" | "WEEKLY" | "MONTHLY";
+  durationMonths: number;
+  scope: "SINGLE_ROUTE" | "MULTI_ROUTE";
+  amount: number;
+}
+
 interface FareRule {
   id: string;
   code: string;
@@ -25,10 +32,19 @@ interface FareRule {
   effectiveFrom: string;
   effectiveTo: string;
   status: "ACTIVE" | "INACTIVE";
+  passPrices: PassPrice[];
 }
 
 export default function FareRulesPage() {
   const [rules, setRules] = useState<FareRule[]>([]);
+  const [expandedRules, setExpandedRules] = useState<Record<string, boolean>>({});
+
+  const toggleRuleExpand = (ruleId: string) => {
+    setExpandedRules((prev) => ({
+      ...prev,
+      [ruleId]: !prev[ruleId],
+    }));
+  };
 
   const [modeFilter, setModeFilter] = useState("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -63,6 +79,11 @@ export default function FareRulesPage() {
   const [maxPrice, setMaxPrice] = useState(15000);
   const [effectiveFrom, setEffectiveFrom] = useState("2026-01-01");
   const [effectiveTo, setEffectiveTo] = useState("2026-12-31");
+  
+  // Pass Prices Configuration list
+  const [passPrices, setPassPrices] = useState<PassPrice[]>([
+    { durationType: "DAILY", durationMonths: 1, scope: "MULTI_ROUTE", amount: 20000 }
+  ]);
 
   useEffect(() => {
     async function loadRules() {
@@ -79,7 +100,8 @@ export default function FareRulesPage() {
             maxPrice: r.maxPrice || 0,
             effectiveFrom: r.effectiveFrom || "",
             effectiveTo: r.effectiveTo || "",
-            status: r.status || "ACTIVE"
+            status: r.status || "ACTIVE",
+            passPrices: r.passPrices || []
           })));
         }
       } catch (err: any) {
@@ -100,6 +122,9 @@ export default function FareRulesPage() {
     setMaxPrice(15000);
     setEffectiveFrom("2026-01-01");
     setEffectiveTo("2026-12-31");
+    setPassPrices([
+      { durationType: "DAILY", durationMonths: 1, scope: "MULTI_ROUTE", amount: 20000 }
+    ]);
     setIsModalOpen(true);
   };
 
@@ -114,7 +139,41 @@ export default function FareRulesPage() {
     setMaxPrice(rule.maxPrice);
     setEffectiveFrom(rule.effectiveFrom);
     setEffectiveTo(rule.effectiveTo);
+    setPassPrices(rule.passPrices && rule.passPrices.length > 0 ? rule.passPrices.map(p => ({
+      durationType: p.durationType,
+      durationMonths: p.durationMonths || 1,
+      scope: p.scope,
+      amount: p.amount
+    })) : [
+      { durationType: "DAILY", durationMonths: 1, scope: "MULTI_ROUTE", amount: 20000 }
+    ]);
     setIsModalOpen(true);
+  };
+
+  const handleAddPassPrice = () => {
+    setPassPrices([
+      ...passPrices,
+      { durationType: "DAILY", durationMonths: 1, scope: "MULTI_ROUTE", amount: 20000 }
+    ]);
+  };
+
+  const handleRemovePassPrice = (index: number) => {
+    if (passPrices.length <= 1) {
+      alert("Yêu cầu cần có ít nhất 1 mức giá vé định kỳ!");
+      return;
+    }
+    setPassPrices(passPrices.filter((_, idx) => idx !== index));
+  };
+
+  const handleUpdatePassPrice = (index: number, field: keyof PassPrice, value: any) => {
+    setPassPrices(
+      passPrices.map((p, idx) => {
+        if (idx === index) {
+          return { ...p, [field]: value };
+        }
+        return p;
+      })
+    );
   };
 
   const handleToggleStatus = (id: string) => {
@@ -162,6 +221,13 @@ export default function FareRulesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const formattedPassPrices = passPrices.map(p => ({
+      durationType: p.durationType,
+      durationMonths: p.durationType === "MONTHLY" ? p.durationMonths : null,
+      scope: p.scope,
+      amount: p.amount
+    }));
+
     if (modalMode === "CREATE") {
       try {
         const newRule = await fetchApi("/api/fare-rules", {
@@ -174,7 +240,8 @@ export default function FareRulesPage() {
             minPrice,
             maxPrice,
             effectiveFrom,
-            effectiveTo
+            effectiveTo,
+            passPrices: formattedPassPrices
           })
         });
         setRules([...rules, {
@@ -187,7 +254,8 @@ export default function FareRulesPage() {
           maxPrice: newRule.maxPrice || maxPrice,
           effectiveFrom: newRule.effectiveFrom || effectiveFrom,
           effectiveTo: newRule.effectiveTo || effectiveTo,
-          status: newRule.status || "ACTIVE"
+          status: newRule.status || "ACTIVE",
+          passPrices: newRule.passPrices || passPrices
         }]);
       } catch (err: any) {
         console.warn("POST /api/fare-rules failed, using mock local state. Error:", err.message);
@@ -202,7 +270,8 @@ export default function FareRulesPage() {
           maxPrice,
           effectiveFrom,
           effectiveTo,
-          status: "ACTIVE"
+          status: "ACTIVE",
+          passPrices: passPrices
         };
         setRules([...rules, fallbackRule]);
       }
@@ -216,7 +285,8 @@ export default function FareRulesPage() {
             minPrice,
             maxPrice,
             effectiveFrom,
-            effectiveTo
+            effectiveTo,
+            passPrices: formattedPassPrices
           })
         });
         setRules(
@@ -231,7 +301,8 @@ export default function FareRulesPage() {
                   minPrice: updatedRule.minPrice !== undefined ? updatedRule.minPrice : minPrice,
                   maxPrice: updatedRule.maxPrice !== undefined ? updatedRule.maxPrice : maxPrice,
                   effectiveFrom: updatedRule.effectiveFrom || effectiveFrom,
-                  effectiveTo: updatedRule.effectiveTo || effectiveTo
+                  effectiveTo: updatedRule.effectiveTo || effectiveTo,
+                  passPrices: updatedRule.passPrices || passPrices
                 }
               : r
           )
@@ -242,7 +313,7 @@ export default function FareRulesPage() {
         setRules(
           rules.map((r) =>
             r.id === selectedRule.id
-              ? { ...r, code, mode, baseFare, ratePerKm, minPrice, maxPrice, effectiveFrom, effectiveTo }
+              ? { ...r, code, mode, baseFare, ratePerKm, minPrice, maxPrice, effectiveFrom, effectiveTo, passPrices }
               : r
           )
         );
@@ -289,13 +360,13 @@ export default function FareRulesPage() {
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Tổng quy tắc cấu hình
           </h3>
-          <div className="text-3xl font-bold text-on-surface">{rules.length}</div>
+          <div className="text-3xl font-bold text-on-surface font-data-mono">{rules.length}</div>
         </div>
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Đang áp dụng (Active)
           </h3>
-          <div className="text-3xl font-bold text-tertiary-fixed-dim">
+          <div className="text-3xl font-bold text-tertiary-fixed-dim font-data-mono">
             {rules.filter((r) => r.status === "ACTIVE").length}
           </div>
         </div>
@@ -303,7 +374,7 @@ export default function FareRulesPage() {
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Đường sắt (Metro)
           </h3>
-          <div className="text-3xl font-bold text-secondary-fixed-dim">
+          <div className="text-3xl font-bold text-secondary-fixed-dim font-data-mono">
             {rules.filter((r) => r.mode === "METRO" && r.status === "ACTIVE").length}
           </div>
         </div>
@@ -311,7 +382,7 @@ export default function FareRulesPage() {
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Xe buýt (Bus)
           </h3>
-          <div className="text-3xl font-bold text-on-surface">
+          <div className="text-3xl font-bold text-on-surface font-data-mono">
             {rules.filter((r) => r.mode === "BUS" && r.status === "ACTIVE").length}
           </div>
         </div>
@@ -326,9 +397,9 @@ export default function FareRulesPage() {
             className="bg-surface-container-high border-none rounded-md py-1.5 px-3 font-body-sm text-body-sm text-on-surface outline-none cursor-pointer w-full md:w-52"
           >
             <option value="ALL">Tất cả phương thức</option>
-            <option value="METRO">Đường sắt (Metro)</option>
-            <option value="BUS">Xe buýt (Bus)</option>
-            <option value="ANY">Đa phương thức (Any)</option>
+            <option value="METRO">Đường sắt</option>
+            <option value="BUS">Xe buýt</option>
+            <option value="ANY">Đa phương thức</option>
           </select>
         </div>
       </div>
@@ -338,7 +409,7 @@ export default function FareRulesPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-surface-container-low border-b border-outline-variant text-[11px]">
+              <tr className="bg-surface-container-low border-b border-outline-variant text-[11px] whitespace-nowrap">
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
                   Mã quy tắc
                 </th>
@@ -346,7 +417,7 @@ export default function FareRulesPage() {
                   Loại hình
                 </th>
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
-                  Vé sàn (base)
+                  Vé sàn
                 </th>
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
                   Đơn giá/Km
@@ -356,6 +427,9 @@ export default function FareRulesPage() {
                 </th>
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
                   Hiệu lực từ - đến
+                </th>
+                <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
+                  Vé định kỳ
                 </th>
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
                   Trạng thái
@@ -372,10 +446,10 @@ export default function FareRulesPage() {
                     key={rule.id}
                     className="border-b border-outline-variant hover:bg-surface-container-low transition-colors h-[48px]"
                   >
-                    <td className="p-table-cell-padding text-on-surface font-semibold font-data-mono">
+                    <td className="p-table-cell-padding text-on-surface font-semibold font-data-mono whitespace-nowrap">
                       {rule.code}
                     </td>
-                    <td className="p-table-cell-padding">
+                    <td className="p-table-cell-padding whitespace-nowrap">
                       <span
                         className={`px-2 py-0.5 rounded font-label-caps text-[10px] font-bold ${
                           rule.mode === "METRO"
@@ -388,19 +462,65 @@ export default function FareRulesPage() {
                         {rule.mode}
                       </span>
                     </td>
-                    <td className="p-table-cell-padding text-right font-data-mono text-on-surface font-semibold">
+                    <td className="p-table-cell-padding text-right font-data-mono text-on-surface font-semibold whitespace-nowrap">
                       ₫ {rule.baseFare.toLocaleString()}
                     </td>
-                    <td className="p-table-cell-padding text-right font-data-mono text-on-surface font-semibold text-secondary-fixed-dim">
+                    <td className="p-table-cell-padding text-right font-data-mono text-on-surface font-semibold text-secondary-fixed-dim whitespace-nowrap">
                       {rule.ratePerKm > 0 ? `₫ ${rule.ratePerKm.toLocaleString()}` : "-"}
                     </td>
-                    <td className="p-table-cell-padding text-right font-data-mono text-on-surface-variant">
+                    <td className="p-table-cell-padding text-right font-data-mono text-on-surface-variant whitespace-nowrap">
                       ₫ {rule.minPrice.toLocaleString()} - ₫ {rule.maxPrice.toLocaleString()}
                     </td>
-                    <td className="p-table-cell-padding font-data-mono text-on-surface-variant text-xs">
+                    <td className="p-table-cell-padding font-data-mono text-on-surface-variant text-xs whitespace-nowrap">
                       {rule.effectiveFrom} / {rule.effectiveTo}
                     </td>
-                    <td className="p-table-cell-padding">
+                    <td className="p-table-cell-padding text-xs text-on-surface-variant min-w-[320px] max-w-[450px]">
+                      <div className="flex flex-wrap gap-1 items-center">
+                        {rule.passPrices && rule.passPrices.length > 0 ? (
+                          <>
+                            {(expandedRules[rule.id]
+                              ? rule.passPrices
+                              : rule.passPrices.slice(0, 2)
+                            ).map((p, pIdx) => (
+                              <span
+                                key={pIdx}
+                                className="inline-flex items-center text-[10px] font-data-mono bg-surface-container-high px-1.5 py-0.5 rounded text-on-surface-variant border border-outline-variant/30"
+                              >
+                                {p.durationType === "DAILY"
+                                  ? "Vé ngày"
+                                  : p.durationType === "WEEKLY"
+                                  ? "Vé tuần"
+                                  : "Vé tháng"}
+                                {p.durationType === "MONTHLY"
+                                  ? ` (${p.durationMonths || 1}t)`
+                                  : ""}
+                                : ₫{(p.amount || 0).toLocaleString()}
+                                {p.scope
+                                  ? ` (${
+                                      p.scope === "SINGLE_ROUTE"
+                                        ? "Đơn"
+                                        : "Liên"
+                                    })`
+                                  : ""}
+                              </span>
+                            ))}
+                            {rule.passPrices.length > 2 && (
+                              <button
+                                onClick={() => toggleRuleExpand(rule.id)}
+                                className="text-[10px] font-semibold text-secondary hover:text-secondary-fixed-dim hover:underline transition-colors focus:outline-none cursor-pointer inline-flex items-center px-1"
+                              >
+                                {expandedRules[rule.id]
+                                  ? "Thu gọn"
+                                  : `+ ${rule.passPrices.length - 2} mức giá`}
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-outline italic text-[11px]">Không có</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-table-cell-padding whitespace-nowrap">
                       <span
                         className={`px-2.5 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${
                           rule.status === "ACTIVE"
@@ -410,16 +530,16 @@ export default function FareRulesPage() {
                       >
                         {rule.status === "ACTIVE" ? (
                           <>
-                            <CheckCircle className="h-3 w-3" /> ACTIVE
+                            <CheckCircle className="h-3 w-3" /> Hoạt động
                           </>
                         ) : (
                           <>
-                            <XCircle className="h-3 w-3" /> DISABLED
+                            <XCircle className="h-3 w-3" /> Tạm dừng
                           </>
                         )}
                       </span>
                     </td>
-                    <td className="p-table-cell-padding text-right">
+                    <td className="p-table-cell-padding text-right whitespace-nowrap">
                       <div className="inline-flex gap-2">
                         <button
                           onClick={() => handleOpenEditModal(rule)}
@@ -443,7 +563,7 @@ export default function FareRulesPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} className="p-8 text-center text-on-surface-variant font-medium">
+                  <td colSpan={9} className="p-8 text-center text-on-surface-variant font-medium">
                     Không tìm thấy quy tắc giá vé nào khớp điều kiện tìm kiếm.
                   </td>
                 </tr>
@@ -460,7 +580,7 @@ export default function FareRulesPage() {
             className="fixed inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setIsModalOpen(false)}
           />
-          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl w-full max-w-lg p-6 z-10">
+          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl w-full max-w-lg p-6 z-10 overflow-y-auto max-h-[90vh]">
             <div className="flex justify-between items-center pb-3 border-b border-outline-variant mb-4">
               <h3 className="text-lg font-bold text-on-surface">
                 {modalMode === "CREATE" ? "Tạo Quy Tắc Giá Vé Mới" : "Chỉnh Sửa Quy Tắc Giá Vé"}
@@ -498,9 +618,9 @@ export default function FareRulesPage() {
                     onChange={(e) => setMode(e.target.value as any)}
                     className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
                   >
-                    <option value="METRO">Đường sắt (METRO)</option>
-                    <option value="BUS">Xe buýt (BUS)</option>
-                    <option value="ANY">Đa phương thức (ANY)</option>
+                    <option value="METRO">Đường sắt</option>
+                    <option value="BUS">Xe buýt</option>
+                    <option value="ANY">Đa phương thức</option>
                   </select>
                 </div>
               </div>
@@ -594,6 +714,88 @@ export default function FareRulesPage() {
                 </div>
               </div>
 
+              {/* Dynamic passPrices builder */}
+              <div className="border-t border-outline-variant pt-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="block text-xs font-semibold text-on-surface-variant">
+                    Cấu hình giá vé định kỳ *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddPassPrice}
+                    className="text-xs text-secondary hover:underline cursor-pointer flex items-center gap-1 font-semibold"
+                  >
+                    + Thêm giá vé định kỳ
+                  </button>
+                </div>
+
+                <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
+                  {passPrices.map((p, idx) => (
+                    <div key={idx} className="flex gap-2 items-end bg-surface-container-low p-2 rounded border border-outline-variant relative">
+                      <div className="w-[30%]">
+                        <label className="block text-[9px] text-outline mb-0.5">Kỳ hạn</label>
+                        <select
+                          value={p.durationType}
+                          onChange={(e) => handleUpdatePassPrice(idx, "durationType", e.target.value as any)}
+                          className="w-full px-2 py-1 bg-surface-bright border border-outline-variant rounded text-xs text-on-surface outline-none"
+                        >
+                          <option value="DAILY">Theo ngày</option>
+                          <option value="WEEKLY">Theo tuần</option>
+                          <option value="MONTHLY">Theo tháng</option>
+                        </select>
+                      </div>
+
+                      {p.durationType === "MONTHLY" && (
+                        <div className="w-[15%]">
+                          <label className="block text-[9px] text-outline mb-0.5">Tháng</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="12"
+                            value={p.durationMonths}
+                            onChange={(e) => handleUpdatePassPrice(idx, "durationMonths", parseInt(e.target.value) || 1)}
+                            className="w-full px-2 py-1 bg-surface-bright border border-outline-variant rounded text-xs text-on-surface outline-none font-data-mono"
+                          />
+                        </div>
+                      )}
+
+                      <div className={p.durationType === "MONTHLY" ? "w-[25%]" : "w-[40%]"}>
+                        <label className="block text-[9px] text-outline mb-0.5">Phạm vi</label>
+                        <select
+                          value={p.scope}
+                          onChange={(e) => handleUpdatePassPrice(idx, "scope", e.target.value as any)}
+                          className="w-full px-2 py-1 bg-surface-bright border border-outline-variant rounded text-xs text-on-surface outline-none"
+                        >
+                          <option value="SINGLE_ROUTE">Một tuyến</option>
+                          <option value="MULTI_ROUTE">Liên tuyến</option>
+                        </select>
+                      </div>
+
+                      <div className="w-[25%]">
+                        <label className="block text-[9px] text-outline mb-0.5">Mệnh giá (₫)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1000"
+                          value={p.amount}
+                          onChange={(e) => handleUpdatePassPrice(idx, "amount", parseInt(e.target.value) || 0)}
+                          className="w-full px-2 py-1 bg-surface-bright border border-outline-variant rounded text-xs text-on-surface outline-none font-data-mono"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePassPrice(idx)}
+                        className="p-1.5 hover:bg-error-container/20 text-error rounded cursor-pointer"
+                        title="Xóa"
+                      >
+                        <X className="h-4.5 w-4.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex gap-3 justify-end pt-4">
                 <button
                   type="button"
@@ -630,7 +832,7 @@ export default function FareRulesPage() {
                 <h3 className="text-lg font-bold text-on-surface">Xác nhận vô hiệu hóa quy tắc</h3>
                 <p className="text-sm text-on-surface-variant mt-1">
                   Bạn có chắc chắn muốn chuyển trạng thái quy tắc giá vé <strong>{confirmModal.ruleCode}</strong> sang{" "}
-                  <strong>TẠM DỪNG (INACTIVE)</strong> không? Hành động này không thể hoàn tác.
+                  <strong>TẠM DỪNG</strong> không? Hành động này không thể hoàn tác.
                 </p>
               </div>
             </div>

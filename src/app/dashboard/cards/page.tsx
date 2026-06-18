@@ -17,9 +17,11 @@ import { fetchApi } from "@/lib/api";
 interface TransportCard {
   id: string;
   uid: string;
-  passengerType: "NORMAL" | "STUDENT" | "SENIOR" | "PRIORITY";
-  balance: number;
+  passengerType: string; // "ANON" | "IDENTIFIED" from backend type
   status: "ACTIVE" | "SUSPENDED" | "ISSUED" | "REVOKED";
+  supportsMetro: boolean;
+  supportsBus: boolean;
+  linkedUserId: string | null;
   linkedTicket: string | null;
   createdAt: string;
 }
@@ -31,6 +33,9 @@ export default function CardsPage() {
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [isLinkUserModalOpen, setIsLinkUserModalOpen] = useState(false);
+  const [linkUserId, setLinkUserId] = useState("");
+  const [linkUserError, setLinkUserError] = useState<string | null>(null);
   const [selectedCard, setSelectedCard] = useState<TransportCard | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
@@ -42,7 +47,7 @@ export default function CardsPage() {
     isOpen: boolean;
     cardId: string;
     cardUid: string;
-    action: "ACTIVATE" | "SUSPEND" | "REVOKE" | "UNLINK_TICKET";
+    action: "ACTIVATE" | "SUSPEND" | "REVOKE" | "UNLINK_TICKET" | "UNLINK_USER";
     title: string;
     description: string;
     requireReason: boolean;
@@ -60,39 +65,76 @@ export default function CardsPage() {
 
   // Form State - Phát hành thẻ
   const [uid, setUid] = useState("");
-  const [passengerType, setPassengerType] = useState<"NORMAL" | "STUDENT" | "SENIOR" | "PRIORITY">("NORMAL");
-  const [balance, setBalance] = useState(50000);
+  const [userId, setUserId] = useState("");
+  const [supportsMetro, setSupportsMetro] = useState(true);
+  const [supportsBus, setSupportsBus] = useState(true);
 
-  // Form State - Liên kết vé
-  const [ticketType, setTicketType] = useState("Vé lượt R-M1");
+  // Ticket link list
+  const [availableTickets, setAvailableTickets] = useState<{ id: string; label: string }[]>([]);
+  const [selectedTicketId, setSelectedTicketId] = useState("");
+  const [customTicketId, setCustomTicketId] = useState("");
 
-  useEffect(() => {
-    async function loadCards() {
-      try {
-        const data = await fetchApi("/api/cards");
-        if (Array.isArray(data)) {
-          setCards(data.map((c: any) => ({
+  const loadData = async () => {
+    try {
+      const [cardsData, ticketsData] = await Promise.all([
+        fetchApi("/api/cards"),
+        fetchApi("/api/admin/tickets").catch(() => [])
+      ]);
+
+      const tList = ticketsData.content || ticketsData || [];
+      const cardToTicketMap: Record<string, any> = {};
+      if (Array.isArray(tList)) {
+        tList.forEach((t: any) => {
+          if (t.cardId && t.status === "ACTIVE") {
+            cardToTicketMap[t.cardId] = t;
+          }
+        });
+      }
+
+      if (Array.isArray(cardsData)) {
+        setCards(cardsData.map((c: any) => {
+          const linkedT = cardToTicketMap[c.id];
+          return {
             id: c.id,
             uid: c.cardUid,
-            passengerType: c.type === "IDENTIFIED" ? "STUDENT" : "NORMAL",
-            balance: 50000,
+            passengerType: c.type || "ANON",
             status: c.status || "ACTIVE",
-            linkedTicket: c.linkedUserId ? "Vé liên kết" : null,
+            supportsMetro: !!c.supportsMetro,
+            supportsBus: !!c.supportsBus,
+            linkedUserId: c.linkedUserId || null,
+            linkedTicket: linkedT
+              ? `Vé ${linkedT.type === "SINGLE_TRIP" ? "lượt" : "tháng"} - ${
+                  linkedT.mode === "BUS" ? "Xe buýt" : linkedT.mode === "METRO" ? "Đường sắt" : linkedT.mode
+                } - ₫${(linkedT.price || 0).toLocaleString()}`
+              : null,
             createdAt: c.createdAt ? new Date(c.createdAt).toISOString().replace("T", " ").substring(0, 16) : ""
-          })));
-        }
-      } catch (err: any) {
-        console.warn("FMC Cards API is offline.", err.message);
-        setIsOffline(true);
+          };
+        }));
       }
+
+      if (Array.isArray(tList)) {
+        setAvailableTickets(tList.map((t: any) => ({
+          id: t.ticketId || t.id,
+          label: `Vé ${t.type === "SINGLE_TRIP" ? "lượt" : "tháng"} - ${
+            t.mode === "BUS" ? "Xe buýt" : t.mode === "METRO" ? "Đường sắt" : t.mode
+          } - ₫${(t.price || 0).toLocaleString()}`
+        })));
+      }
+    } catch (err: any) {
+      console.warn("FMC Cards API is offline.", err.message);
+      setIsOffline(true);
     }
-    loadCards();
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
 
   const handleOpenCreateModal = () => {
     setUid(generateRandomUid());
-    setPassengerType("NORMAL");
-    setBalance(50000);
+    setUserId("");
+    setSupportsMetro(true);
+    setSupportsBus(true);
     setModalError(null);
     setIsModalOpen(true);
   };
@@ -114,31 +156,32 @@ export default function CardsPage() {
         method: "POST",
         body: JSON.stringify({
           cardUid: uid,
-          type: passengerType === "NORMAL" ? "ANON" : "IDENTIFIED",
-          supportsMetro: true,
-          supportsBus: true
+          userId: userId.trim() || null,
+          supportsMetro,
+          supportsBus
         })
       });
       
       const createdCard: TransportCard = {
         id: newCard.id,
         uid: newCard.cardUid,
-        passengerType: passengerType,
-        balance: balance,
+        passengerType: newCard.type || "ANON",
         status: newCard.status || "ISSUED",
-        linkedTicket: null,
+        supportsMetro: !!newCard.supportsMetro,
+        supportsBus: !!newCard.supportsBus,
+        linkedUserId: newCard.linkedUserId || null,
+        linkedTicket: newCard.linkedUserId ? "Đã liên kết" : null,
         createdAt: newCard.createdAt ? new Date(newCard.createdAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16)
       };
       setCards([createdCard, ...cards]);
       setIsModalOpen(false);
     } catch (err: any) {
       console.warn("POST /api/cards failed. Error:", err.message);
-      setIsOffline(true);
-      setModalError("Lỗi kết nối tới Backend API. Không thể phát hành thẻ mới.");
+      setModalError(`Lỗi phát hành thẻ: ${err.message || "Không thể thực hiện."}`);
     }
   };
 
-  const triggerConfirm = (cardId: string, cardUid: string, action: "ACTIVATE" | "SUSPEND" | "REVOKE" | "UNLINK_TICKET") => {
+  const triggerConfirm = (cardId: string, cardUid: string, action: "ACTIVATE" | "SUSPEND" | "REVOKE" | "UNLINK_TICKET" | "UNLINK_USER") => {
     const card = cards.find(c => c.id === cardId);
     if (!card) return;
 
@@ -167,6 +210,10 @@ export default function CardsPage() {
     } else if (action === "UNLINK_TICKET") {
       title = "Xác nhận Hủy Liên Kết Vé";
       description = `Bạn có chắc chắn muốn hủy liên kết vé khỏi thẻ ${cardUid} không?`;
+      requireReason = false;
+    } else if (action === "UNLINK_USER") {
+      title = "Xác nhận Hủy Liên Kết Người Dùng";
+      description = `Bạn có chắc chắn muốn hủy liên kết người dùng khỏi thẻ ${cardUid} không?`;
       requireReason = false;
     }
 
@@ -200,11 +247,26 @@ export default function CardsPage() {
       setPageError(null);
       try {
         await fetchApi("/api/cards/" + cardId + "/unlink-ticket", { method: "DELETE" });
+        await loadData();
       } catch (err: any) {
         console.warn("Unlink ticket failed:", err.message);
-        setIsOffline(true);
         setCards(originalList);
         setPageError(`Thao tác thất bại: ${err.message || "Không thể hủy liên kết vé khỏi thẻ " + cardUid}`);
+      }
+      return;
+    }
+
+    if (action === "UNLINK_USER") {
+      const originalList = [...cards];
+      setCards(cards.map((c) => c.id === cardId ? { ...c, linkedUserId: null } : c));
+      setPageError(null);
+      try {
+        await fetchApi("/api/cards/" + cardId + "/unlink", { method: "PATCH" });
+        await loadData();
+      } catch (err: any) {
+        console.warn("Unlink user failed:", err.message);
+        setCards(originalList);
+        setPageError(`Thao tác thất bại: ${err.message || "Không thể hủy liên kết người dùng khỏi thẻ " + cardUid}`);
       }
       return;
     }
@@ -242,9 +304,9 @@ export default function CardsPage() {
           await fetchApi("/api/cards/" + cardId + "/activate", { method: "PATCH" });
         }
       }
+      await loadData();
     } catch (err: any) {
       console.warn("Card action API failed. Error:", err.message);
-      setIsOffline(true);
       setCards(originalList);
       setPageError(`Thao tác thất bại: ${err.message || "Không thể thay đổi trạng thái thẻ " + cardUid}`);
     }
@@ -252,35 +314,79 @@ export default function CardsPage() {
 
   const handleOpenLinkModal = (card: TransportCard) => {
     setSelectedCard(card);
-    setTicketType("Vé lượt - R-M1 (Cát Linh - Hà Đông)");
+    setSelectedTicketId(availableTickets[0]?.id || "");
+    setCustomTicketId("");
     setIsLinkModalOpen(true);
   };
 
   const handleLinkTicketSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedCard) {
+      const targetTicketId = customTicketId.trim() || selectedTicketId;
+      if (!targetTicketId) {
+        alert("Vui lòng chọn hoặc nhập mã vé!");
+        return;
+      }
+
       const originalList = [...cards];
       setCards(
         cards.map((c) =>
-          c.id === selectedCard.id ? { ...c, linkedTicket: ticketType, status: "ACTIVE" } : c
+          c.id === selectedCard.id ? { ...c, linkedTicket: `Vé: ${targetTicketId.substring(0, 8)}`, status: "ACTIVE" } : c
         )
       );
       setPageError(null);
 
       try {
-        const dummyTicketId = "11111111-1111-1111-1111-111111111111";
         await fetchApi("/api/cards/" + selectedCard.id + "/link-ticket", {
           method: "POST",
-          body: JSON.stringify({ ticketId: dummyTicketId })
+          body: JSON.stringify({ ticketId: targetTicketId })
         });
+        await loadData();
       } catch (err: any) {
         console.warn("Link ticket API failed. Error:", err.message);
-        setIsOffline(true);
         setCards(originalList);
-        setPageError("Lỗi kết nối tới Backend API. Không thể liên kết vé vào thẻ " + selectedCard.uid + ".");
+        setPageError("Lỗi kết nối tới Backend API. Không thể liên kết vé vào thẻ " + selectedCard.uid + ". Chi tiết: " + err.message);
       }
     }
     setIsLinkModalOpen(false);
+  };
+
+  const handleOpenLinkUserModal = (card: TransportCard) => {
+    setSelectedCard(card);
+    setLinkUserId("");
+    setLinkUserError(null);
+    setIsLinkUserModalOpen(true);
+  };
+
+  const handleLinkUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedCard) {
+      const targetUserId = linkUserId.trim();
+      if (!targetUserId) {
+        setLinkUserError("Vui lòng nhập Mã người dùng!");
+        return;
+      }
+
+      // Simple UUID format verification
+      const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+      if (!uuidRegex.test(targetUserId)) {
+        setLinkUserError("Mã người dùng không hợp lệ (phải ở định dạng UUID)!");
+        return;
+      }
+
+      setLinkUserError(null);
+      try {
+        await fetchApi("/api/cards/" + selectedCard.id + "/link", {
+          method: "PATCH",
+          body: JSON.stringify({ userId: targetUserId })
+        });
+        await loadData();
+        setIsLinkUserModalOpen(false);
+      } catch (err: any) {
+        console.warn("Link user API failed. Error:", err.message);
+        setLinkUserError(`Lỗi liên kết người dùng: ${err.message || "Không thể thực hiện."}`);
+      }
+    }
   };
 
   const filteredCards = cards.filter((c) => {
@@ -294,7 +400,7 @@ export default function CardsPage() {
       {isOffline && (
         <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20">
           <span className="flex items-center gap-2 font-medium">
-            <AlertTriangle className="h-4 w-4 text-error" /> Lỗi kết nối tới Backend API. Một số dữ liệu thống kê sẽ hiển thị mặc định bằng 0.
+            <AlertTriangle className="h-4 w-4 text-error" /> Lỗi kết nối tới Backend API. Dữ liệu đang hiển thị theo cache cục bộ.
           </span>
         </div>
       )}    
@@ -337,7 +443,7 @@ export default function CardsPage() {
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Tổng số thẻ hệ thống
           </h3>
-          <div className="text-3xl font-bold text-on-surface">
+          <div className="text-3xl font-bold text-on-surface font-data-mono">
             {cards.length.toLocaleString()}
           </div>
         </div>
@@ -345,7 +451,7 @@ export default function CardsPage() {
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Hoạt động (Active)
           </h3>
-          <div className="text-3xl font-bold text-tertiary-fixed-dim">
+          <div className="text-3xl font-bold text-tertiary-fixed-dim font-data-mono">
             {cards.filter((c) => c.status === "ACTIVE").length.toLocaleString()}
           </div>
         </div>
@@ -353,7 +459,7 @@ export default function CardsPage() {
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Tạm dừng (Suspended)
           </h3>
-          <div className="text-3xl font-bold text-secondary-fixed-dim">
+          <div className="text-3xl font-bold text-secondary-fixed-dim font-data-mono">
             {cards.filter((c) => c.status === "SUSPENDED").length.toLocaleString()}
           </div>
         </div>
@@ -361,7 +467,7 @@ export default function CardsPage() {
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Danh sách đen (Blacklisted)
           </h3>
-          <div className="text-3xl font-bold text-error">
+          <div className="text-3xl font-bold text-error font-data-mono">
             {cards.filter((c) => c.status === "REVOKED").length.toLocaleString()}
           </div>
         </div>
@@ -376,21 +482,19 @@ export default function CardsPage() {
             className="bg-surface-container-high border-none rounded-md py-1.5 px-3 font-body-sm text-body-sm text-on-surface outline-none cursor-pointer w-full sm:w-40"
           >
             <option value="ALL">Tất cả trạng thái</option>
-            <option value="ACTIVE">ACTIVE (Hoạt động)</option>
-            <option value="ISSUED">ISSUED (Chưa kích hoạt)</option>
-            <option value="SUSPENDED">SUSPENDED (Tạm khóa)</option>
-            <option value="REVOKED">REVOKED (Hủy bỏ)</option>
+            <option value="ACTIVE">Hoạt động</option>
+            <option value="ISSUED">Chưa kích hoạt</option>
+            <option value="SUSPENDED">Tạm khóa</option>
+            <option value="REVOKED">Đã hủy</option>
           </select>
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
             className="bg-surface-container-high border-none rounded-md py-1.5 px-3 font-body-sm text-body-sm text-on-surface outline-none cursor-pointer w-full sm:w-40"
           >
-            <option value="ALL">Tất cả đối tượng</option>
-            <option value="NORMAL">NORMAL (Thường)</option>
-            <option value="STUDENT">STUDENT (Học sinh/SV)</option>
-            <option value="SENIOR">SENIOR (Người cao tuổi)</option>
-            <option value="PRIORITY">PRIORITY (Ưu tiên)</option>
+            <option value="ALL">Tất cả loại thẻ</option>
+            <option value="ANON">ANON (Thẻ vô danh)</option>
+            <option value="IDENTIFIED">IDENTIFIED (Thẻ định danh)</option>
           </select>
         </div>
       </div>
@@ -405,10 +509,10 @@ export default function CardsPage() {
                   Mã thẻ (UID)
                 </th>
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
-                  Loại đối tượng
+                  Loại thẻ / Tính năng
                 </th>
-                <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
-                  Số dư ví (₫)
+                <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
+                  Mã người dùng liên kết
                 </th>
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
                   Vé liên kết
@@ -431,28 +535,32 @@ export default function CardsPage() {
                     <td className="p-table-cell-padding text-on-surface font-semibold font-data-mono">
                       {card.uid}
                     </td>
-                    <td className="p-table-cell-padding text-on-surface-variant font-semibold">
-                      {card.passengerType}
+                    <td className="p-table-cell-padding text-on-surface-variant font-medium">
+                      <span className="font-bold">{card.passengerType}</span>
+                      <span className="text-[10px] text-outline ml-2">
+                        (Metro: {card.supportsMetro ? "✔" : "✘"}, Bus: {card.supportsBus ? "✔" : "✘"})
+                      </span>
                     </td>
-                    <td className="p-table-cell-padding text-right font-data-mono text-on-surface font-semibold">
-                      {card.balance.toLocaleString()}
+                    <td className="p-table-cell-padding font-data-mono text-on-surface-variant text-[11px] truncate max-w-[120px]" title={card.linkedUserId || ""}>
+                      {card.linkedUserId || <span className="text-outline italic">Chưa liên kết</span>}
                     </td>
                     <td className="p-table-cell-padding text-on-surface">
                       {card.linkedTicket ? (
-                        <span className="inline-flex items-center gap-1.5 text-secondary-fixed-dim">
-                          <CheckCircle className="h-3.5 w-3.5 text-tertiary-fixed-dim" /> {card.linkedTicket}
+                        <div className="inline-flex items-center gap-2 bg-secondary-container/30 px-2.5 py-1 rounded-full text-xs text-on-secondary-container">
+                          <CheckCircle className="h-3.5 w-3.5 text-secondary" />
+                          <span className="font-semibold">{card.linkedTicket}</span>
                           <button
                             onClick={() => triggerConfirm(card.id, card.uid, "UNLINK_TICKET")}
-                            className="text-error hover:underline text-[10px] uppercase font-semibold ml-1 cursor-pointer"
+                            className="text-error hover:text-error-hover transition-colors font-bold ml-1 text-xs cursor-pointer border-l border-outline-variant pl-2"
                             title="Hủy liên kết vé"
                           >
                             Gỡ
                           </button>
-                        </span>
+                        </div>
                       ) : (
                         <button
                           onClick={() => handleOpenLinkModal(card)}
-                          className="inline-flex items-center gap-1 text-xs text-outline hover:text-secondary-fixed-dim hover:underline cursor-pointer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 border border-outline rounded-full text-xs text-on-surface-variant hover:bg-surface-container hover:text-primary transition-all cursor-pointer font-medium"
                         >
                           <LinkIcon className="h-3 w-3" /> Liên kết vé
                         </button>
@@ -460,7 +568,7 @@ export default function CardsPage() {
                     </td>
                     <td className="p-table-cell-padding">
                       <span
-                        className={`px-2 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${
+                        className={`px-2.5 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${
                           card.status === "ACTIVE"
                             ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
                             : card.status === "SUSPENDED"
@@ -472,19 +580,19 @@ export default function CardsPage() {
                       >
                         {card.status === "ACTIVE" ? (
                           <>
-                            <CheckCircle className="h-3 w-3" /> ACTIVE
+                            <CheckCircle className="h-3 w-3" /> Hoạt động
                           </>
                         ) : card.status === "SUSPENDED" ? (
                           <>
-                            <AlertTriangle className="h-3 w-3" /> SUSPENDED
+                            <AlertTriangle className="h-3 w-3" /> Tạm khóa
                           </>
                         ) : card.status === "ISSUED" ? (
                           <>
-                            <Eye className="h-3 w-3" /> ISSUED
+                            <Eye className="h-3 w-3" /> Chưa kích hoạt
                           </>
                         ) : (
                           <>
-                            <XCircle className="h-3 w-3" /> REVOKED
+                            <XCircle className="h-3 w-3" /> Đã hủy
                           </>
                         )}
                       </span>
@@ -574,7 +682,7 @@ export default function CardsPage() {
               )}
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Mã thẻ định danh (UID)
+                  Mã thẻ định danh
                 </label>
                 <input
                   type="text"
@@ -587,33 +695,37 @@ export default function CardsPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Nhóm hành khách (Đối tượng)
-                </label>
-                <select
-                  value={passengerType}
-                  onChange={(e) => setPassengerType(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
-                >
-                  <option value="NORMAL">Thường (NORMAL)</option>
-                  <option value="STUDENT">Học sinh / Sinh viên (STUDENT)</option>
-                  <option value="SENIOR">Người cao tuổi (SENIOR)</option>
-                  <option value="PRIORITY">Ưu tiên miễn giảm (PRIORITY)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Nạp tiền ví điện tử ban đầu (₫)
+                  Mã người dùng liên kết - Tùy chọn
                 </label>
                 <input
-                  type="number"
-                  min="0"
-                  step="1000"
-                  required
-                  value={balance}
-                  onChange={(e) => setBalance(parseInt(e.target.value))}
+                  type="text"
+                  placeholder="Ví dụ: 33333333-3333-3333-3333-333333333333"
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value)}
                   className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
                 />
+              </div>
+
+              <div className="flex gap-6 py-2">
+                <label className="flex items-center gap-2 text-sm text-on-surface cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={supportsMetro}
+                    onChange={(e) => setSupportsMetro(e.target.checked)}
+                    className="rounded text-secondary focus:ring-secondary h-4.5 w-4.5"
+                  />
+                  <span>Hỗ trợ Metro</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-sm text-on-surface cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={supportsBus}
+                    onChange={(e) => setSupportsBus(e.target.checked)}
+                    className="rounded text-secondary focus:ring-secondary h-4.5 w-4.5"
+                  />
+                  <span>Hỗ trợ Xe Bus</span>
+                </label>
               </div>
 
               <div className="flex gap-3 justify-end pt-4">
@@ -658,23 +770,52 @@ export default function CardsPage() {
               <div className="bg-surface-container-low p-3 rounded border border-outline-variant">
                 <div className="text-xs text-on-surface-variant mb-1 font-semibold">Thẻ chọn liên kết:</div>
                 <div className="text-sm font-bold font-data-mono text-on-surface">{selectedCard?.uid}</div>
-                <div className="text-xs text-on-surface-variant">Đối tượng: {selectedCard?.passengerType}</div>
+                <div className="text-xs text-on-surface-variant">Loại thẻ: {selectedCard?.passengerType}</div>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Chọn loại vé cần nạp vào thẻ
+                  Chọn Vé có sẵn trên hệ thống
                 </label>
-                <select
-                  value={ticketType}
-                  onChange={(e) => setTicketType(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
-                >
-                  <option value="Vé lượt - R-M1 (Cát Linh - Hà Đông)">Vé lượt - Tuyến R-M1 (Cát Linh - Hà Đông)</option>
-                  <option value="Vé tháng - R-M1">Vé tháng 1 Tuyến - R-M1</option>
-                  <option value="Vé tháng liên tuyến (Bus + Metro)">Vé tháng Liên Tuyến (Toàn mạng lưới)</option>
-                  <option value="Vé lượt - R-B01">Vé lượt - Tuyến Bus R-B01</option>
-                </select>
+                {availableTickets.length > 0 ? (
+                  <select
+                    value={selectedTicketId}
+                    onChange={(e) => {
+                      setSelectedTicketId(e.target.value);
+                      setCustomTicketId("");
+                    }}
+                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
+                  >
+                    {availableTickets.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="text-xs text-error italic p-2 bg-error-container/10 border border-error/20 rounded">
+                    Không tìm thấy vé nào đang lưu trữ. Hãy sử dụng tùy chọn nhập tay bên dưới.
+                  </div>
+                )}
+              </div>
+
+              <div className="relative flex py-1 items-center">
+                <div className="flex-grow border-t border-outline-variant"></div>
+                <span className="flex-shrink mx-4 text-outline text-xs">HOẶC</span>
+                <div className="flex-grow border-t border-outline-variant"></div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                  Nhập mã vé thủ công
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ví dụ: 11111111-1111-1111-1111-111111111111"
+                  value={customTicketId}
+                  onChange={(e) => setCustomTicketId(e.target.value)}
+                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
+                />
               </div>
 
               <div className="flex gap-3 justify-end pt-4">
@@ -689,7 +830,7 @@ export default function CardsPage() {
                   type="submit"
                   className="px-4 py-2 bg-secondary text-on-secondary rounded hover:bg-secondary-container transition-colors text-xs font-semibold uppercase cursor-pointer"
                 >
-                  Xác nhận nạp vé
+                  Xác nhận liên kết
                 </button>
               </div>
             </form>

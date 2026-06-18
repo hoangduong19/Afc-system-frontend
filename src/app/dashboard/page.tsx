@@ -5,14 +5,12 @@ import {
   Coins,
   TrendingUp,
   Ticket,
-  RefreshCw,
   AlertTriangle
 } from "lucide-react";
 import Link from "next/link";
 import { fetchApi } from "@/lib/api";
 
 export default function OverviewPage() {
-  const [chartPeriod, setChartPeriod] = useState("7 ngày qua");
   const [isOffline, setIsOffline] = useState(false);
   
   // Real data state
@@ -115,21 +113,6 @@ export default function OverviewPage() {
           </p>
         </div>
 
-        {/* Level 4 Transactions Pending */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm hover:bg-surface-container-low transition-colors">
-          <div className="flex justify-between items-start mb-2">
-            <h3 className="font-label-caps text-label-caps text-on-surface-variant uppercase">
-              GD Cấp 4 (Pending)
-            </h3>
-            <RefreshCw className="h-5 w-5 text-on-surface-variant animate-spin-slow" />
-          </div>
-          <div className="font-display text-2xl font-bold text-on-surface mb-1">
-            {counts.pendingL4.toLocaleString()}
-          </div>
-          <div className="w-full bg-surface-container-high rounded-full h-1.5 mt-3 overflow-hidden">
-            <div className="bg-secondary h-1.5 rounded-full" style={{ width: "45%" }} />
-          </div>
-        </div>
 
         {/* Anomalies Card (Critical Warning) */}
         <div className="bg-error-container border border-error/20 rounded-xl p-5 shadow-sm col-span-1 md:col-span-2 lg:col-span-1 flex flex-col justify-between">
@@ -152,124 +135,9 @@ export default function OverviewPage() {
           </Link>
         </div>
 
-        {/* Card Status Breakdown */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm col-span-1 md:col-span-2 lg:col-span-4 flex flex-col justify-center">
-          <h3 className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-4">
-            Trạng thái Thẻ (Hệ thống)
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="font-body-sm text-body-sm">Active</span>
-                <span className="font-data-mono text-data-mono font-semibold">{counts.activeCards.toLocaleString()}</span>
-              </div>
-              <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden">
-                <div className="bg-tertiary-fixed-dim h-2 rounded-full" style={{ width: `${counts.activeCards > 0 ? Math.min(Math.round(counts.activeCards / (counts.activeCards + counts.suspendedCards + counts.blacklistedCards) * 100), 100) : 0}%` }} />
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="font-body-sm text-body-sm">Suspended</span>
-                <span className="font-data-mono text-data-mono font-semibold">{counts.suspendedCards.toLocaleString()}</span>
-              </div>
-              <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden">
-                <div className="bg-secondary-fixed-dim h-2 rounded-full" style={{ width: `${counts.suspendedCards > 0 ? Math.min(Math.round(counts.suspendedCards / (counts.activeCards + counts.suspendedCards + counts.blacklistedCards) * 100), 100) : 0}%` }} />
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between mb-1">
-                <span className="font-body-sm text-body-sm">Blacklisted</span>
-                <span className="font-data-mono text-data-mono font-semibold">{counts.blacklistedCards.toLocaleString()}</span>
-              </div>
-              <div className="w-full bg-surface-container-high rounded-full h-2 overflow-hidden">
-                <div className="bg-error h-2 rounded-full" style={{ width: `${counts.blacklistedCards > 0 ? Math.min(Math.round(counts.blacklistedCards / (counts.activeCards + counts.suspendedCards + counts.blacklistedCards) * 100), 100) : 0}%` }} />
-              </div>
-            </div>
-          </div>
-        </div>
+
       </div>
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-grid-gutter mb-8">
-        {/* Daily Revenue Bar Chart */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm col-span-1 lg:col-span-2 flex flex-col justify-between">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-headline-sm text-headline-sm text-on-surface">
-              Doanh thu theo ngày
-            </h3>
-            <select
-              value={chartPeriod}
-              onChange={(e) => setChartPeriod(e.target.value)}
-              className="bg-surface-container-high border-none rounded-md py-1 px-3 font-body-sm text-body-sm text-on-surface outline-none cursor-pointer"
-            >
-              <option>7 ngày qua</option>
-              <option>30 ngày qua</option>
-            </select>
-          </div>
-          
-          {/* Responsive Bar Graphic */}
-          <div className="h-64 w-full bg-surface-container flex items-end justify-between p-4 rounded-lg gap-2">
-            {[
-              { label: "T2", height: "33%", val: "800M" },
-              { label: "T3", height: "50%", val: "1.2B" },
-              { label: "T4", height: "40%", val: "950M" },
-              { label: "T5", height: "75%", val: "1.8B" },
-              { label: "T6", height: "66%", val: "1.5B" },
-              { label: "T7", height: "90%", val: "2.1B" },
-              { label: "CN", height: "100%", val: "2.4B", highlight: true }
-            ].map((bar, idx) => (
-              <div
-                key={idx}
-                style={{ height: bar.height }}
-                className={`w-[12%] rounded-t-sm hover:opacity-95 transition-all group relative cursor-pointer ${
-                  bar.highlight
-                    ? "bg-secondary shadow-[0_0_10px_rgba(33,112,228,0.5)]"
-                    : "bg-secondary/70 hover:bg-secondary"
-                }`}
-              >
-                {/* Tooltip */}
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-inverse-surface text-inverse-on-surface text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10 font-data-mono">
-                  {bar.label}: {bar.val}
-                </div>
-                {/* Day text bottom */}
-                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-on-surface-variant font-medium">
-                  {bar.label}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Hourly Traffic Area Chart */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm col-span-1 flex flex-col justify-between">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-headline-sm text-headline-sm text-on-surface">
-              Lưu lượng theo giờ
-            </h3>
-          </div>
-          <div className="h-64 w-full bg-surface-container rounded-lg relative overflow-hidden flex items-end">
-            {/* Simulated SVG Area Chart */}
-            <svg
-              className="absolute bottom-0 w-full h-full"
-              preserveAspectRatio="none"
-              viewBox="0 0 100 100"
-            >
-              <path
-                d="M0,100 L0,80 Q10,70 20,85 T40,60 T60,20 T80,40 T100,10 L100,100 Z"
-                fill="rgba(33, 112, 228, 0.2)"
-                stroke="#2170e4"
-                strokeWidth="2"
-              />
-            </svg>
-            <div className="absolute bottom-2 left-2 text-[10px] text-on-surface-variant font-medium">
-              00:00
-            </div>
-            <div className="absolute bottom-2 right-2 text-[10px] text-on-surface-variant font-medium">
-              23:59
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Data Tables Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-grid-gutter">
@@ -288,7 +156,7 @@ export default function OverviewPage() {
               <thead>
                 <tr className="bg-surface-container-low border-b border-outline-variant text-[11px]">
                   <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
-                    Mã GD (ID)
+                    Mã giao dịch
                   </th>
                   <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
                     Mã Thẻ

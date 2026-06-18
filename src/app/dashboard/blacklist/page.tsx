@@ -64,8 +64,8 @@ export default function BlacklistPage() {
           setBlacklist(blacklistData.map((b) => ({
             id: b.id,
             cardUid: b.cardUid || cardMap[b.cardId] || "Mã thẻ ẩn",
-            reason: b.reason || "DEBT",
-            notes: b.reason === "DEBT" ? "Nợ cước chưa thanh toán" : b.reason === "STOLEN" ? "Báo mất thẻ vật lý" : b.reason === "FRAUD" ? "Gian lận / Phát hiện giả mạo" : (b.reason || "N/A"),
+            reason: b.reason || "N/A",
+            notes: b.reason || "N/A",
             blockedAt: b.addedAt ? new Date(b.addedAt).toISOString().replace("T", " ").substring(0, 16) : ""
           })));
         }
@@ -149,8 +149,8 @@ export default function BlacklistPage() {
   };
 
   const filteredBlacklist = blacklist.filter((c) => {
-    const matchesReason = reasonFilter === "ALL" || c.reason === reasonFilter;
-    return matchesReason;
+    if (reasonFilter === "ALL") return true;
+    return c.reason.toUpperCase().includes(reasonFilter.toUpperCase());
   });
 
   return (
@@ -158,7 +158,7 @@ export default function BlacklistPage() {
       {isOffline && (
         <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20">
           <span className="flex items-center gap-2 font-medium">
-            <AlertTriangle className="h-4 w-4 text-error" /> Lỗi kết nối tới Backend API. Một số dữ liệu thống kê sẽ hiển thị mặc định bằng 0.
+            <AlertTriangle className="h-4 w-4 text-error" /> Lỗi kết nối tới Backend API. Dữ liệu đang hiển thị theo cache cục bộ.
           </span>
         </div>
       )}    
@@ -196,37 +196,13 @@ export default function BlacklistPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-grid-gutter">
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-grid-gutter">
+        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm col-span-1">
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Tổng số thẻ bị khóa
           </h3>
           <div className="text-3xl font-bold text-on-surface">
-            {blacklist.length.toLocaleString()}
-          </div>
-        </div>
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
-          <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
-            Nợ cước (DEBT)
-          </h3>
-          <div className="text-3xl font-bold text-secondary-fixed-dim">
-            {blacklist.filter((c) => c.reason === "DEBT").length.toLocaleString()}
-          </div>
-        </div>
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
-          <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
-            Báo mất (STOLEN)
-          </h3>
-          <div className="text-3xl font-bold text-tertiary-fixed-dim">
-            {blacklist.filter((c) => c.reason === "STOLEN").length.toLocaleString()}
-          </div>
-        </div>
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
-          <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
-            Gian lận (FRAUD)
-          </h3>
-          <div className="text-3xl font-bold text-error">
-            {blacklist.filter((c) => c.reason === "FRAUD").length.toLocaleString()}
+            {blacklist.length.toLocaleString()} Thẻ
           </div>
         </div>
       </div>
@@ -240,9 +216,9 @@ export default function BlacklistPage() {
             className="bg-surface-container-high border-none rounded-md py-1.5 px-3 font-body-sm text-body-sm text-on-surface outline-none cursor-pointer w-full md:w-52"
           >
             <option value="ALL">Tất cả lý do chặn</option>
-            <option value="DEBT">Nợ cước (DEBT)</option>
-            <option value="STOLEN">Báo mất (STOLEN)</option>
-            <option value="FRAUD">Gian lận thẻ (FRAUD)</option>
+            <option value="DEBT">Nợ cước</option>
+            <option value="STOLEN">Báo mất</option>
+            <option value="FRAUD">Gian lận thẻ</option>
           </select>
         </div>
       </div>
@@ -258,9 +234,6 @@ export default function BlacklistPage() {
                 </th>
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
                   Lý do khóa
-                </th>
-                <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
-                  Chi tiết lý do
                 </th>
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
                   Thời gian chặn
@@ -280,23 +253,8 @@ export default function BlacklistPage() {
                     <td className="p-table-cell-padding text-on-surface font-semibold font-data-mono">
                       {item.cardUid}
                     </td>
-                    <td className="p-table-cell-padding">
-                      <span
-                        className={`px-2.5 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${
-                          item.reason === "FRAUD"
-                            ? "bg-error text-on-error"
-                            : item.reason === "STOLEN"
-                            ? "bg-secondary-fixed-dim/20 text-on-secondary-fixed-variant"
-                            : item.reason === "DEBT"
-                            ? "bg-surface-variant text-on-surface-variant"
-                            : "bg-error-container text-on-error-container"
-                        }`}
-                      >
-                        <AlertOctagon className="h-3 w-3" /> {item.reason === "FRAUD" || item.reason === "STOLEN" || item.reason === "DEBT" ? item.reason : "BLOCKED"}
-                      </span>
-                    </td>
                     <td className="p-table-cell-padding text-on-surface font-medium">
-                      {item.notes}
+                      {item.reason}
                     </td>
                     <td className="p-table-cell-padding text-on-surface-variant font-data-mono">
                       {item.blockedAt}
@@ -313,7 +271,7 @@ export default function BlacklistPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-on-surface-variant font-medium">
+                  <td colSpan={4} className="p-8 text-center text-on-surface-variant font-medium">
                     Không tìm thấy thẻ bị chặn nào khớp điều kiện lọc.
                   </td>
                 </tr>

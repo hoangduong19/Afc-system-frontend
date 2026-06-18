@@ -444,7 +444,6 @@ export default function SettlementsPage() {
           <div className="text-2xl font-bold text-on-surface font-data-mono">
             ₫ {formatMoney(activePeriodInfo.expectedRevenue)}
           </div>
-          <p className="text-[11px] text-on-surface-variant mt-1">Dựa trên log bán vé & thẻ phát hành</p>
         </div>
 
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm relative overflow-hidden group">
@@ -454,7 +453,6 @@ export default function SettlementsPage() {
           <div className="text-2xl font-bold text-on-surface font-data-mono flex items-center gap-1.5">
             ₫ {formatMoney(activePeriodInfo.actualRevenue)}
           </div>
-          <p className="text-[11px] text-on-surface-variant mt-1">Dựa trên log quẹt thẻ thực tế tại cổng ga</p>
         </div>
 
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm relative overflow-hidden group">
@@ -493,13 +491,6 @@ export default function SettlementsPage() {
               <AlertTriangle className="h-4 w-4 ml-1 animate-pulse" />
             )}
           </div>
-          <p className="text-[11px] text-on-surface-variant mt-1">
-            {activePeriodInfo.reconciliationStatus === "MATCH"
-              ? "Hoàn hảo, không sai lệch"
-              : activePeriodInfo.reconciliationStatus === "WARNING"
-              ? "Sai lệch nhỏ trong ngưỡng dung sai"
-              : `Lệch vượt ngưỡng ${((Math.abs(activePeriodInfo.discrepancy) / (activePeriodInfo.expectedRevenue || 1)) * 100).toFixed(3)}%`}
-          </p>
         </div>
 
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm relative overflow-hidden group">
@@ -509,9 +500,6 @@ export default function SettlementsPage() {
           <div className="text-2xl font-bold text-on-surface font-data-mono flex items-center gap-1.5">
             {((activePeriodInfo.actualRevenue / activePeriodInfo.expectedRevenue) * 100).toFixed(2)}%
           </div>
-          <p className="text-[11px] text-on-surface-variant mt-1">
-            Yêu cầu liên thông FMC: &gt; 99.5%
-          </p>
         </div>
       </div>
 
@@ -522,8 +510,8 @@ export default function SettlementsPage() {
             <h3 className="font-bold text-on-surface flex items-center gap-2 text-sm">
               <FileSpreadsheet className="h-4 w-4 text-secondary" /> Bảng phân chia doanh thu nhà vận hành
             </h3>
-            <p className="text-xs text-on-surface-variant">
-              Quyết toán dựa trên quãng đường (KM) chạy thực tế và lượng khách đi (Trips)
+            <p className="text-[11px] text-on-surface-variant mt-0.5">
+              Quyết toán dựa trên quãng đường chạy thực tế và lượng khách đi
             </p>
           </div>
           {activePeriodInfo.period !== "N/A" && (
@@ -542,13 +530,13 @@ export default function SettlementsPage() {
               <thead>
                 <tr className="bg-surface-container-low border-b border-outline-variant text-[10px]">
                   <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
-                    Đơn vị (Code)
+                    Đơn vị
                   </th>
                   <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
-                    Tổng hành trình (KM)
+                    Tổng hành trình
                   </th>
                   <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
-                    Tổng lượt (Trips)
+                    Tổng lượt
                   </th>
                   <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
                     Phân chia trực tiếp
@@ -664,9 +652,9 @@ export default function SettlementsPage() {
       <div className="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-sm overflow-hidden">
         <div className="p-4 border-b border-outline-variant bg-surface-container-low flex justify-between items-center">
           <div>
-            <h3 className="font-bold text-on-surface flex items-center gap-2 text-sm">
-              <FileText className="h-4 w-4 text-secondary" /> Lịch sử đối soát & Sự kiện bất thường (Audit Logs)
-            </h3>
+             <h3 className="text-sm font-bold text-on-surface flex items-center gap-2">
+               <FileText className="h-4 w-4 text-secondary" /> Lịch sử đối soát & Sự kiện bất thường
+             </h3>
             <p className="text-xs text-on-surface-variant">
               Nhật ký ghi nhận tiến trình chạy đối soát tự động và các log lỗi giao dịch phát hiện.
             </p>
@@ -746,7 +734,7 @@ export default function SettlementsPage() {
               )}
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Chọn Kỳ Quyết Toán cần đối soát (Tháng/Năm):
+                  Chọn Kỳ Quyết Toán cần đối soát:
                 </label>
                 <input
                   type="month"
@@ -762,7 +750,7 @@ export default function SettlementsPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Tải lên tệp log bổ sung ngoài hệ thống (Tùy chọn - Không bắt buộc):
+                  Tải lên tệp log bổ sung ngoài hệ thống (Tùy chọn):
                 </label>
                 
                 <div

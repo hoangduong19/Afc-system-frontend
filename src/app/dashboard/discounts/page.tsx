@@ -237,36 +237,7 @@ export default function DiscountsPage() {
         </button>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-grid-gutter">
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm flex items-center justify-between">
-          <div>
-            <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
-              Nhóm học sinh / SV (STUDENT)
-            </h3>
-            <div className="text-3xl font-bold text-secondary-fixed-dim">
-              {discounts.find((d) => d.passengerType === "STUDENT" && d.status === "ACTIVE")?.discountValue || 0}%
-            </div>
-          </div>
-          <Percent className="h-10 w-10 text-outline opacity-40" />
-        </div>
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
-          <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
-            Nhóm người cao tuổi (SENIOR)
-          </h3>
-          <div className="text-3xl font-bold text-tertiary-fixed-dim">
-            {discounts.find((d) => d.passengerType === "SENIOR" && d.status === "ACTIVE")?.discountValue || 0}%
-          </div>
-        </div>
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
-          <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
-            Nhóm ưu tiên (PRIORITY)
-          </h3>
-          <div className="text-3xl font-bold text-error">
-            {discounts.find((d) => d.passengerType === "PRIORITY" && d.status === "ACTIVE")?.discountValue || 0}% (FREE)
-          </div>
-        </div>
-      </div>
+
 
       {/* Filters */}
       <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 shadow-sm flex items-center justify-between">
@@ -278,9 +249,9 @@ export default function DiscountsPage() {
             className="bg-surface-container-high border-none rounded-md py-1.5 px-3 font-body-sm text-body-sm text-on-surface outline-none cursor-pointer w-52 animate-pulse-once"
           >
             <option value="ALL">Tất cả nhóm hành khách</option>
-            <option value="STUDENT">Học sinh / Sinh viên (STUDENT)</option>
-            <option value="SENIOR">Người cao tuổi (SENIOR)</option>
-            <option value="PRIORITY">Đối tượng ưu tiên (PRIORITY)</option>
+            <option value="STUDENT">Học sinh / Sinh viên</option>
+            <option value="SENIOR">Người cao tuổi</option>
+            <option value="PRIORITY">Đối tượng ưu tiên</option>
           </select>
         </div>
       </div>
@@ -290,7 +261,7 @@ export default function DiscountsPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-surface-container-low border-b border-outline-variant text-[11px]">
+              <tr className="bg-surface-container-low border-b border-outline-variant text-[11px] whitespace-nowrap">
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
                   Nhóm hành khách
                 </th>
@@ -318,19 +289,23 @@ export default function DiscountsPage() {
                     key={ds.id}
                     className="border-b border-outline-variant hover:bg-surface-container-low transition-colors h-[48px]"
                   >
-                    <td className="p-table-cell-padding text-on-surface font-semibold">
-                      {ds.passengerType}
+                    <td className="p-table-cell-padding text-on-surface font-semibold whitespace-nowrap">
+                      {ds.passengerType === "STUDENT"
+                        ? "Học sinh / Sinh viên"
+                        : ds.passengerType === "SENIOR"
+                        ? "Người cao tuổi"
+                        : "Đối tượng ưu tiên"}
                     </td>
-                    <td className="p-table-cell-padding text-on-surface-variant font-medium">
+                    <td className="p-table-cell-padding text-on-surface-variant font-medium whitespace-nowrap">
                       {ds.discountType === "PERCENT" ? "Giảm theo phần trăm (%)" : "Giảm trừ tiền mặt cố định (đ)"}
                     </td>
-                    <td className="p-table-cell-padding text-right font-data-mono text-on-surface font-bold text-tertiary-fixed-dim">
+                    <td className="p-table-cell-padding text-right font-data-mono text-on-surface font-bold text-tertiary-fixed-dim whitespace-nowrap">
                       {ds.discountType === "PERCENT" ? `${ds.discountValue}%` : `₫ ${ds.discountValue.toLocaleString()}`}
                     </td>
-                    <td className="p-table-cell-padding font-data-mono text-on-surface-variant">
+                    <td className="p-table-cell-padding font-data-mono text-on-surface-variant whitespace-nowrap">
                       {ds.effectiveFrom} / {ds.effectiveTo}
                     </td>
-                    <td className="p-table-cell-padding">
+                    <td className="p-table-cell-padding whitespace-nowrap">
                       <span
                         className={`px-2.5 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${
                           ds.status === "ACTIVE"
@@ -340,16 +315,16 @@ export default function DiscountsPage() {
                       >
                         {ds.status === "ACTIVE" ? (
                           <>
-                            <CheckCircle className="h-3 w-3" /> ACTIVE
+                            <CheckCircle className="h-3 w-3" /> Hoạt động
                           </>
                         ) : (
                           <>
-                            <XCircle className="h-3 w-3" /> INACTIVE
+                            <XCircle className="h-3 w-3" /> Tạm dừng
                           </>
                         )}
                       </span>
                     </td>
-                    <td className="p-table-cell-padding text-right">
+                    <td className="p-table-cell-padding text-right whitespace-nowrap">
                       <div className="inline-flex gap-2">
                         <button
                           onClick={() => handleOpenEditModal(ds)}
@@ -414,9 +389,9 @@ export default function DiscountsPage() {
                   className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
                   disabled={modalMode === "EDIT"}
                 >
-                  <option value="STUDENT">Học sinh / Sinh viên (STUDENT)</option>
-                  <option value="SENIOR">Người cao tuổi (SENIOR)</option>
-                  <option value="PRIORITY">Đối tượng ưu tiên miễn giảm (PRIORITY)</option>
+                  <option value="STUDENT">Học sinh / Sinh viên</option>
+                  <option value="SENIOR">Người cao tuổi</option>
+                  <option value="PRIORITY">Đối tượng ưu tiên miễn giảm</option>
                 </select>
               </div>
 
@@ -512,7 +487,13 @@ export default function DiscountsPage() {
               <div>
                 <h3 className="text-lg font-bold text-on-surface">Xác nhận vô hiệu hóa chính sách</h3>
                 <p className="text-sm text-on-surface-variant mt-1">
-                  Bạn có chắc chắn muốn chuyển trạng thái chính sách giảm giá cho đối tượng <strong>{confirmModal.passengerType}</strong> sang{" "}
+                  Bạn có chắc chắn muốn chuyển trạng thái chính sách giảm giá cho đối tượng <strong>
+                    {confirmModal.passengerType === "STUDENT"
+                      ? "Học sinh / Sinh viên"
+                      : confirmModal.passengerType === "SENIOR"
+                      ? "Người cao tuổi"
+                      : "Đối tượng ưu tiên"}
+                  </strong> sang{" "}
                   <strong>TẠM DỪNG (INACTIVE)</strong> không? Hành động này không thể hoàn tác.
                 </p>
               </div>

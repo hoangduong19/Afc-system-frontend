@@ -56,7 +56,7 @@ export default function AnomaliesPage() {
           isResolved: !!item.isResolved,
           detectedAt: item.detectedAt ? new Date(item.detectedAt).toISOString().replace("T", " ").substring(0, 19) : "",
           resolvedAt: item.resolvedAt ? new Date(item.resolvedAt).toISOString().replace("T", " ").substring(0, 19) : undefined,
-          notes: item.notes || "",
+          notes: item.resolveNotes || item.notes || "",
           resolvedBy: item.resolvedBy || "Hệ thống"
         })));
       }
@@ -153,10 +153,10 @@ export default function AnomaliesPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-grid-gutter">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-grid-gutter">
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
-            Sự cố chưa xử lý (Open)
+            Sự cố chưa xử lý
           </h3>
           <div className="text-3xl font-bold text-error font-data-mono">
             {anomalies.filter((a) => !a.isResolved).length}
@@ -178,14 +178,6 @@ export default function AnomaliesPage() {
             {anomalies.filter((a) => a.isResolved).length}
           </div>
         </div>
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
-          <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
-            Hiệu năng cổng kiểm soát
-          </h3>
-          <div className="text-3xl font-bold text-on-surface font-data-mono">
-            99.85%
-          </div>
-        </div>
       </div>
 
       {/* Filters */}
@@ -197,9 +189,9 @@ export default function AnomaliesPage() {
             className="bg-surface-container-high border-none rounded-md py-1.5 px-3 font-body-sm text-body-sm text-on-surface outline-none cursor-pointer w-full md:w-40"
           >
             <option value="ALL">Tất cả mức độ</option>
-            <option value="CRITICAL">Nghiêm trọng (CRITICAL)</option>
-            <option value="WARNING">Cảnh báo (WARNING)</option>
-            <option value="INFO">Thông tin (INFO)</option>
+            <option value="CRITICAL">Nghiêm trọng</option>
+            <option value="WARNING">Cảnh báo</option>
+            <option value="INFO">Thông tin</option>
           </select>
 
           <select
@@ -208,8 +200,8 @@ export default function AnomaliesPage() {
             className="bg-surface-container-high border-none rounded-md py-1.5 px-3 font-body-sm text-body-sm text-on-surface outline-none cursor-pointer w-full md:w-40"
           >
             <option value="ALL">Tất cả trạng thái</option>
-            <option value="OPEN">Chưa xử lý (Open)</option>
-            <option value="RESOLVED">Đã xử lý (Resolved)</option>
+            <option value="OPEN">Chưa xử lý</option>
+            <option value="RESOLVED">Đã xử lý</option>
           </select>
         </div>
       </div>
@@ -372,7 +364,7 @@ export default function AnomaliesPage() {
             <form onSubmit={handleResolveAnomaly} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1 flex items-center gap-1">
-                  <MessageSquare className="h-3.5 w-3.5" /> Ghi chú nội dung giải quyết (notes):
+                  <MessageSquare className="h-3.5 w-3.5" /> Ghi chú nội dung giải quyết:
                 </label>
                 <textarea
                   required
@@ -385,7 +377,7 @@ export default function AnomaliesPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1 flex items-center gap-1">
-                  <Coins className="h-3.5 w-3.5" /> Giá vé sửa đổi (correctedFare) - Tùy chọn:
+                  <Coins className="h-3.5 w-3.5" /> Giá vé sửa đổi - Tùy chọn:
                 </label>
                 <input
                   type="number"
@@ -410,7 +402,7 @@ export default function AnomaliesPage() {
                   type="submit"
                   className="px-4 py-2 bg-secondary text-on-secondary rounded hover:bg-secondary-container transition-colors text-xs font-semibold uppercase cursor-pointer"
                 >
-                  Xác nhận Khắc phục (Resolve)
+                  Xác nhận Khắc phục
                 </button>
               </div>
             </form>

@@ -28,18 +28,7 @@ export default function StationsPage() {
   const [stations, setStations] = useState<Station[]>([]);
 
   const [routeFilter, setRouteFilter] = useState("ALL");
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<"CREATE" | "EDIT">("CREATE");
-  const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [isOffline, setIsOffline] = useState(false);
-
-  // Form State
-  const [code, setCode] = useState("");
-  const [name, setName] = useState("");
-  const [routeCode, setRouteCode] = useState("R-M1");
-  const [kmMarker, setKmMarker] = useState(0.0);
-  const [stationOrder, setStationOrder] = useState(1);
-
   const [routesList, setRoutesList] = useState<any[]>([]);
 
   useEffect(() => {
@@ -84,119 +73,6 @@ export default function StationsPage() {
     loadData();
   }, []);
 
-  const handleOpenCreateModal = () => {
-    setModalMode("CREATE");
-    setCode("");
-    setName("");
-    setRouteCode("R-M1");
-    setKmMarker(0.0);
-    setStationOrder(stations.length + 1);
-    setIsModalOpen(true);
-  };
-
-  const handleOpenEditModal = (station: Station) => {
-    setSelectedStation(station);
-    setModalMode("EDIT");
-    setCode(station.code);
-    setName(station.name);
-    setRouteCode(station.routeCode);
-    setKmMarker(station.kmMarker);
-    setStationOrder(station.stationOrder);
-    setIsModalOpen(true);
-  };
-
-  const handleDeleteStation = async (id: string) => {
-    if (confirm("Bạn có chắc chắn muốn xóa nhà ga này khỏi hệ thống?")) {
-      setStations(stations.filter((st) => st.id !== id));
-      try {
-        await fetchApi(`/api/stations/${id}`, { method: "DELETE" });
-      } catch (err: any) {
-        console.warn("DELETE /api/stations failed, using local state. Error:", err.message);
-        setIsOffline(true);
-      }
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const currentRoute = routesList.find((r) => r.code === routeCode);
-    const rId = currentRoute ? currentRoute.id : (routeCode === "R-M1" ? "rt-1" : routeCode === "R-B01" ? "rt-2" : "rt-3");
-    
-    if (modalMode === "CREATE") {
-      try {
-        const newStation = await fetchApi("/api/stations", {
-          method: "POST",
-          body: JSON.stringify({
-            code,
-            name,
-            routeId: rId,
-            kmMarker,
-            stationOrder
-          })
-        });
-        setStations([...stations, {
-          id: newStation.id,
-          code: newStation.code,
-          name: newStation.name,
-          routeId: newStation.routeId,
-          routeCode: routeCode,
-          kmMarker: newStation.kmMarker || kmMarker,
-          stationOrder: newStation.stationOrder || stationOrder,
-          createdAt: newStation.createdAt ? new Date(newStation.createdAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16)
-        }]);
-      } catch (err: any) {
-        console.warn("POST /api/stations failed, falling back to local creation. Error:", err.message);
-        setIsOffline(true);
-        const fallbackStation: Station = {
-          id: `st-${Date.now()}`,
-          code,
-          name,
-          routeId: rId,
-          routeCode,
-          kmMarker,
-          stationOrder,
-          createdAt: new Date().toISOString().replace("T", " ").substring(0, 16)
-        };
-        setStations([...stations, fallbackStation]);
-      }
-    } else if (modalMode === "EDIT" && selectedStation) {
-      try {
-        const updatedStation = await fetchApi(`/api/stations/${selectedStation.id}`, {
-          method: "PUT",
-          body: JSON.stringify({
-            name,
-            kmMarker
-          })
-        });
-        setStations(
-          stations.map((st) =>
-            st.id === selectedStation.id
-              ? {
-                  ...st,
-                  name: updatedStation.name || name,
-                  kmMarker: updatedStation.kmMarker !== undefined ? updatedStation.kmMarker : kmMarker,
-                  stationOrder,
-                  routeCode,
-                  routeId: rId
-                }
-              : st
-          )
-        );
-      } catch (err: any) {
-        console.warn("PUT /api/stations failed, falling back to local update. Error:", err.message);
-        setIsOffline(true);
-        setStations(
-          stations.map((st) =>
-            st.id === selectedStation.id
-              ? { ...st, name, routeCode, kmMarker, stationOrder, routeId: rId }
-              : st
-          )
-        );
-      }
-    }
-    setIsModalOpen(false);
-  };
-
   const filteredStations = stations.filter((st) => {
     const matchesRoute = routeFilter === "ALL" || st.routeCode === routeFilter;
     return matchesRoute;
@@ -218,15 +94,9 @@ export default function StationsPage() {
             <Train className="h-6 w-6 text-secondary" /> Quản lý Nhà ga
           </h2>
           <p className="text-sm text-on-surface-variant">
-            Quản lý danh sách các nhà ga, điểm dừng xe buýt, thứ tự dừng và cự ly cột mốc.
+            Danh sách các nhà ga, điểm dừng xe buýt, thứ tự dừng và cự ly cột mốc.
           </p>
         </div>
-        <button
-          onClick={handleOpenCreateModal}
-          className="flex items-center gap-2 px-4 py-2 bg-secondary text-on-secondary rounded-full hover:opacity-90 transition-opacity font-label-caps text-xs uppercase cursor-pointer"
-        >
-          <Plus className="h-4 w-4" /> Thêm nhà ga mới
-        </button>
       </div>
 
       {/* Summary Cards */}
@@ -290,13 +160,10 @@ export default function StationsPage() {
                   Tuyến đường
                 </th>
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
-                  Cột mốc (Km)
+                  Cột mốc
                 </th>
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
                   Thứ tự dừng
-                </th>
-                <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
-                  Thao tác
                 </th>
               </tr>
             </thead>
@@ -322,7 +189,7 @@ export default function StationsPage() {
                       </td>
                       <td className="p-table-cell-padding text-right font-data-mono text-on-surface font-semibold">
                         <span className="inline-flex items-center gap-0.5 text-secondary-fixed-dim">
-                          <Navigation className="h-3 w-3 rotate-45" /> {st.kmMarker.toFixed(2)}
+                          {st.kmMarker.toFixed(2)} km
                         </span>
                       </td>
                       <td className="p-table-cell-padding text-right font-data-mono text-on-surface font-semibold">
@@ -330,29 +197,11 @@ export default function StationsPage() {
                           <Hash className="h-3 w-3" /> {st.stationOrder}
                         </span>
                       </td>
-                      <td className="p-table-cell-padding text-right">
-                        <div className="inline-flex gap-2">
-                          <button
-                            onClick={() => handleOpenEditModal(st)}
-                            className="p-1 hover:bg-surface-container-high rounded text-on-surface-variant hover:text-primary transition-colors cursor-pointer"
-                            title="Sửa"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteStation(st.id)}
-                            className="p-1 hover:bg-surface-container-high rounded text-error hover:bg-error-container/20 transition-colors cursor-pointer"
-                            title="Xóa"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
                     </tr>
                   ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-on-surface-variant font-medium">
+                  <td colSpan={5} className="p-8 text-center text-on-surface-variant font-medium">
                     Không tìm thấy nhà ga nào khớp điều kiện lọc.
                   </td>
                 </tr>
@@ -361,123 +210,6 @@ export default function StationsPage() {
           </table>
         </div>
       </div>
-
-      {/* Form Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setIsModalOpen(false)}
-          />
-          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl w-full max-w-md p-6 z-10">
-            <div className="flex justify-between items-center pb-3 border-b border-outline-variant mb-4">
-              <h3 className="text-lg font-bold text-on-surface">
-                {modalMode === "CREATE" ? "Thêm Nhà Ga Mới" : "Chỉnh Sửa Nhà Ga"}
-              </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 hover:bg-surface-container-high rounded-full text-on-surface-variant cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Mã nhà ga
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ví dụ: ST-M1-01"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.toUpperCase())}
-                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
-                  disabled={modalMode === "EDIT"}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Tên nhà ga
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ví dụ: Ga Cát Linh"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Thuộc tuyến đường
-                </label>
-                <select
-                  value={routeCode}
-                  onChange={(e) => setRouteCode(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
-                >
-                  {routesList.map((r) => (
-                    <option key={r.code} value={r.code}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                    Cột mốc cự ly (Km)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                    value={kmMarker}
-                    onChange={(e) => setKmMarker(parseFloat(e.target.value))}
-                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                    Thứ tự dừng trên tuyến
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    required
-                    value={stationOrder}
-                    onChange={(e) => setStationOrder(parseInt(e.target.value))}
-                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-3 justify-end pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-outline-variant rounded text-on-surface-variant hover:bg-surface-container-high transition-colors text-xs font-semibold uppercase cursor-pointer"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-secondary text-on-secondary rounded hover:bg-secondary-container transition-colors text-xs font-semibold uppercase cursor-pointer"
-                >
-                  {modalMode === "CREATE" ? "Tạo mới" : "Lưu thay đổi"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

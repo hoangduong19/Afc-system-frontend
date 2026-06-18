@@ -3,7 +3,6 @@ import React, { useState, useEffect } from "react";
 import {
   Route as RouteIcon,
   Plus,
-  Search,
   Edit2,
   Trash2,
   X,
@@ -26,7 +25,6 @@ interface RouteItem {
 export default function RoutesPage() {
   const [routes, setRoutes] = useState<RouteItem[]>([]);
 
-  const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [operatorFilter, setOperatorFilter] = useState("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -182,13 +180,10 @@ export default function RoutesPage() {
   };
 
   const filteredRoutes = routes.filter((route) => {
-    const matchesSearch =
-      route.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      route.code.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = typeFilter === "ALL" || route.type === typeFilter;
     const matchesOperator =
       operatorFilter === "ALL" || route.operatorCode === operatorFilter;
-    return matchesSearch && matchesType && matchesOperator;
+    return matchesType && matchesOperator;
   });
 
   return (
@@ -248,19 +243,8 @@ export default function RoutesPage() {
         </div>
       </div>
 
-      {/* Search & Filters */}
+      {/* Filters */}
       <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-outline" />
-          <input
-            className="bg-surface-container-high border-none rounded-full py-1.5 pl-10 pr-4 font-body-sm text-body-sm text-on-surface focus:ring-2 focus:ring-secondary w-full outline-none"
-            placeholder="Tìm theo mã hoặc tên tuyến..."
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-
         <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
           <select
             value={typeFilter}

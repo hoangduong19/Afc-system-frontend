@@ -22,7 +22,6 @@ import {
   FileText,
   HelpCircle,
   Settings,
-  Search,
   Plus,
   Download,
   Bell,
@@ -222,16 +221,6 @@ export default function DashboardShell({ children }: DashboardShellProps) {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Search Bar */}
-            <div className="relative hidden sm:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-outline" />
-              <input
-                className="bg-surface-container-high border-none rounded-full py-1.5 pl-10 pr-4 font-body-sm text-body-sm text-on-surface focus:ring-2 focus:ring-secondary w-48 lg:w-64 transition-all outline-none"
-                placeholder="Tìm kiếm..."
-                type="text"
-              />
-            </div>
-            
             {/* Actions */}
             <div className="flex items-center gap-1 border-l border-outline-variant pl-3 ml-1">
               <button className="p-1.5 text-on-surface-variant hover:text-primary-fixed transition-colors rounded-full hover:bg-surface-container-high cursor-pointer">

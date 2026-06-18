@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import {
   Ticket,
   Plus,
-  Search,
   CheckCircle,
   XCircle,
   Calendar,
@@ -36,7 +35,6 @@ interface TicketItem {
 export default function TicketsPage() {
   const [tickets, setTickets] = useState<TicketItem[]>([]);
 
-  const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [isOffline, setIsOffline] = useState(false);
@@ -54,6 +52,9 @@ export default function TicketsPage() {
   const [newToStation, setNewToStation] = useState("MS05 (Vành Đai 3)");
   const [newPassengerType, setNewPassengerType] = useState("NORMAL");
   const [newValidFrom, setNewValidFrom] = useState("2026-06-11");
+  const [newScope, setNewScope] = useState<"SINGLE_ROUTE" | "MULTI_ROUTE" | "STATION_TO_STATION">("SINGLE_ROUTE");
+  const [newDurationType, setNewDurationType] = useState<"MONTHLY" | "DAILY" | "WEEKLY">("MONTHLY");
+  const [newDurationMonths, setNewDurationMonths] = useState<number>(1);
 
   useEffect(() => {
     async function loadData() {
@@ -99,6 +100,9 @@ export default function TicketsPage() {
     setNewToStation("MS05 (Vành Đai 3)");
     setNewPassengerType("NORMAL");
     setNewValidFrom(new Date().toISOString().substring(0, 10));
+    setNewScope("SINGLE_ROUTE");
+    setNewDurationType("MONTHLY");
+    setNewDurationMonths(1);
     setIsModalOpen(true);
   };
 
@@ -107,7 +111,14 @@ export default function TicketsPage() {
     
     let ticketPrice = 13000;
     if (newType === "MONTHLY_PASS") {
-      ticketPrice = newMode === "ANY" ? 200000 : 100000;
+      const basePrice = newMode === "ANY" ? 200000 : 100000;
+      if (newDurationType === "MONTHLY") {
+        ticketPrice = basePrice * newDurationMonths;
+      } else if (newDurationType === "WEEKLY") {
+        ticketPrice = Math.round(basePrice * 0.25);
+      } else if (newDurationType === "DAILY") {
+        ticketPrice = Math.round(basePrice * 0.05);
+      }
     } else {
       ticketPrice = newMode === "BUS" ? 7000 : 13000;
     }
@@ -119,7 +130,13 @@ export default function TicketsPage() {
 
     const validToDate = new Date(newValidFrom);
     if (newType === "MONTHLY_PASS") {
-      validToDate.setMonth(validToDate.getMonth() + 1);
+      if (newDurationType === "MONTHLY") {
+        validToDate.setMonth(validToDate.getMonth() + newDurationMonths);
+      } else if (newDurationType === "WEEKLY") {
+        validToDate.setDate(validToDate.getDate() + 7);
+      } else if (newDurationType === "DAILY") {
+        validToDate.setDate(validToDate.getDate() + 1);
+      }
     }
 
     let resolvedFromId = "11111111-1111-1111-1111-111111111111";
@@ -144,12 +161,15 @@ export default function TicketsPage() {
           })
         });
       } else {
-        issuedTicket = await fetchApi("/api/tickets/monthly-pass", {
+        issuedTicket = await fetchApi("/api/admin/tickets/issue", {
           method: "POST",
           body: JSON.stringify({
             mode: newMode,
-            scope: newMode === "ANY" ? "MULTI_ROUTE" : "SINGLE_ROUTE",
-            passengerType: newPassengerType
+            scope: newScope,
+            passengerType: newPassengerType,
+            validFrom: newValidFrom,
+            durationType: newDurationType,
+            durationMonths: newDurationType === "MONTHLY" ? newDurationMonths : null
           })
         });
       }
@@ -158,7 +178,7 @@ export default function TicketsPage() {
         ticketId: issuedTicket.ticketId || issuedTicket.id,
         type: issuedTicket.type || newType,
         mode: issuedTicket.mode || newMode,
-        scope: issuedTicket.scope || (newType === "SINGLE_TRIP" ? "STATION_TO_STATION" : (newMode === "ANY" ? "MULTI_ROUTE" : "SINGLE_ROUTE")),
+        scope: issuedTicket.scope || (newType === "SINGLE_TRIP" ? "STATION_TO_STATION" : newScope),
         status: issuedTicket.status || "ACTIVE",
         fromStationCode: newType === "SINGLE_TRIP" ? newFromStation : "ALL",
         toStationCode: newType === "SINGLE_TRIP" ? newToStation : "ALL",
@@ -177,7 +197,7 @@ export default function TicketsPage() {
         ticketId: "tk-" + Math.floor(1000 + Math.random() * 9000) + "-" + Math.random().toString(36).substring(2, 4),
         type: newType,
         mode: newMode,
-        scope: newType === "SINGLE_TRIP" ? "STATION_TO_STATION" : (newMode === "ANY" ? "MULTI_ROUTE" : "SINGLE_ROUTE"),
+        scope: newType === "SINGLE_TRIP" ? "STATION_TO_STATION" : newScope,
         status: "ACTIVE",
         fromStationCode: newType === "SINGLE_TRIP" ? newFromStation : "ALL",
         toStationCode: newType === "SINGLE_TRIP" ? newToStation : "ALL",
@@ -198,13 +218,9 @@ export default function TicketsPage() {
   };
 
   const filteredTickets = tickets.filter((tk) => {
-    const matchesSearch =
-      tk.ticketId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tk.fromStationCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tk.toStationCode.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = typeFilter === "ALL" || tk.type === typeFilter;
     const matchesStatus = statusFilter === "ALL" || tk.status === statusFilter;
-    return matchesSearch && matchesType && matchesStatus;
+    return matchesType && matchesStatus;
   });
 
   return (
@@ -268,19 +284,8 @@ export default function TicketsPage() {
         </div>
       </div>
 
-      {/* Search & Filters */}
+      {/* Filters */}
       <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-outline" />
-          <input
-            className="bg-surface-container-high border-none rounded-full py-1.5 pl-10 pr-4 font-body-sm text-body-sm text-on-surface focus:ring-2 focus:ring-secondary w-full outline-none"
-            placeholder="Tìm theo mã vé hoặc nhà ga..."
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
           <select
             value={typeFilter}
@@ -499,6 +504,58 @@ export default function TicketsPage() {
                     </select>
                   </div>
                 </div>
+              )}
+
+              {newType === "MONTHLY_PASS" && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                        Phạm vi vé (Scope)
+                      </label>
+                      <select
+                        value={newScope}
+                        onChange={(e) => setNewScope(e.target.value as any)}
+                        className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
+                      >
+                        <option value="SINGLE_ROUTE">Một tuyến (Single Route)</option>
+                        <option value="MULTI_ROUTE">Liên tuyến (Multi Route)</option>
+                        <option value="STATION_TO_STATION">Ga đến ga (Station to Station)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                        Loại kỳ hạn (Duration)
+                      </label>
+                      <select
+                        value={newDurationType}
+                        onChange={(e) => setNewDurationType(e.target.value as any)}
+                        className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
+                      >
+                        <option value="MONTHLY">Hàng tháng (Monthly)</option>
+                        <option value="DAILY">Hàng ngày (Daily)</option>
+                        <option value="WEEKLY">Hàng tuần (Weekly)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {newDurationType === "MONTHLY" && (
+                    <div>
+                      <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                        Số tháng hiệu lực (1 - 12)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={12}
+                        required
+                        value={newDurationMonths}
+                        onChange={(e) => setNewDurationMonths(parseInt(e.target.value) || 1)}
+                        className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
+                      />
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="grid grid-cols-2 gap-4">

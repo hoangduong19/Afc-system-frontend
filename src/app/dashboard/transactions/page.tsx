@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import {
   Receipt,
-  Search,
   Filter,
   CheckCircle,
   AlertTriangle,
@@ -42,7 +41,6 @@ interface TransactionItem {
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
 
-  const [searchTerm, setSearchTerm] = useState("");
   const [operatorFilter, setOperatorFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedTx, setSelectedTx] = useState<TransactionItem | null>(null);
@@ -84,14 +82,9 @@ export default function TransactionsPage() {
   }, []);
 
   const filteredTransactions = transactions.filter((tx) => {
-    const matchesSearch =
-      tx.transactionId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tx.cardUid.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      tx.tapInStationCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (tx.tapOutStationCode && tx.tapOutStationCode.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesOperator = operatorFilter === "ALL" || tx.operatorCode === operatorFilter;
     const matchesStatus = statusFilter === "ALL" || tx.tripStatus === statusFilter;
-    return matchesSearch && matchesOperator && matchesStatus;
+    return matchesOperator && matchesStatus;
   });
 
   return (
@@ -151,19 +144,8 @@ export default function TransactionsPage() {
         </div>
       </div>
 
-      {/* Search & Filters */}
+      {/* Filters */}
       <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-outline" />
-          <input
-            className="bg-surface-container-high border-none rounded-full py-1.5 pl-10 pr-4 font-body-sm text-body-sm text-on-surface focus:ring-2 focus:ring-secondary w-full outline-none"
-            placeholder="Tìm theo ID, mã UID thẻ..."
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-
         <div className="flex gap-2 w-full md:w-auto">
           <select
             value={operatorFilter}

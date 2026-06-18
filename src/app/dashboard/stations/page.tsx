@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import {
   Train,
   Plus,
-  Search,
   Edit2,
   Trash2,
   X,
@@ -28,7 +27,6 @@ interface Station {
 export default function StationsPage() {
   const [stations, setStations] = useState<Station[]>([]);
 
-  const [searchTerm, setSearchTerm] = useState("");
   const [routeFilter, setRouteFilter] = useState("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"CREATE" | "EDIT">("CREATE");
@@ -200,11 +198,8 @@ export default function StationsPage() {
   };
 
   const filteredStations = stations.filter((st) => {
-    const matchesSearch =
-      st.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      st.code.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRoute = routeFilter === "ALL" || st.routeCode === routeFilter;
-    return matchesSearch && matchesRoute;
+    return matchesRoute;
   });
 
   return (
@@ -261,19 +256,8 @@ export default function StationsPage() {
         </div>
       </div>
 
-      {/* Search & Filters */}
+      {/* Filters */}
       <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-outline" />
-          <input
-            className="bg-surface-container-high border-none rounded-full py-1.5 pl-10 pr-4 font-body-sm text-body-sm text-on-surface focus:ring-2 focus:ring-secondary w-full outline-none"
-            placeholder="Tìm theo mã hoặc tên ga..."
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-
         <div className="flex gap-2 w-full md:w-auto">
           <select
             value={routeFilter}

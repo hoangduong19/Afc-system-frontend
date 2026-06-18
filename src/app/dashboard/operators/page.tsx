@@ -3,7 +3,6 @@ import React, { useState, useEffect } from "react";
 import {
   Building2,
   Plus,
-  Search,
   Edit2,
   Trash2,
   Power,
@@ -26,7 +25,6 @@ interface Operator {
 export default function OperatorsPage() {
   const [operators, setOperators] = useState<Operator[]>([]);
 
-  const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"CREATE" | "EDIT">("CREATE");
@@ -177,11 +175,8 @@ export default function OperatorsPage() {
   };
 
   const filteredOperators = operators.filter((op) => {
-    const matchesSearch =
-      op.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      op.code.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "ALL" || op.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    return matchesStatus;
   });
 
   return (
@@ -252,19 +247,8 @@ export default function OperatorsPage() {
         </div>
       </div>
 
-      {/* Search & Filters */}
+      {/* Filters */}
       <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-outline" />
-          <input
-            className="bg-surface-container-high border-none rounded-full py-1.5 pl-10 pr-4 font-body-sm text-body-sm text-on-surface focus:ring-2 focus:ring-secondary w-full outline-none"
-            placeholder="Tìm theo mã hoặc tên..."
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-
         <div className="flex gap-2 w-full md:w-auto">
           <select
             value={statusFilter}

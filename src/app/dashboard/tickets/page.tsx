@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import {
   Ticket,
-  Plus,
   CheckCircle,
   XCircle,
   Calendar,
@@ -38,42 +37,15 @@ export default function TicketsPage() {
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [isOffline, setIsOffline] = useState(false);
-  const [stationsList, setStationsList] = useState<any[]>([]);
   
   // Modal States
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<TicketItem | null>(null);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
-  const [modalError, setModalError] = useState<string | null>(null);
-
-  // Form States for creating new ticket
-  const [newUserId, setNewUserId] = useState("");
-  const [newType, setNewType] = useState<"SINGLE_TRIP" | "MONTHLY_PASS">("SINGLE_TRIP");
-  const [newMode, setNewMode] = useState<"METRO" | "BUS" | "ANY">("METRO");
-  const [newFromStationId, setNewFromStationId] = useState("");
-  const [newToStationId, setNewToStationId] = useState("");
-  const [newPassengerType, setNewPassengerType] = useState("NORMAL");
-  const [newValidFrom, setNewValidFrom] = useState("2026-06-11");
-  const [newScope, setNewScope] = useState<"SINGLE_ROUTE" | "MULTI_ROUTE" | "STATION_TO_STATION">("SINGLE_ROUTE");
-  const [newDurationType, setNewDurationType] = useState<"MONTHLY" | "DAILY" | "WEEKLY">("MONTHLY");
-  const [newDurationMonths, setNewDurationMonths] = useState<number>(1);
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [ticketsData, stationsData] = await Promise.all([
-          fetchApi("/api/admin/tickets"),
-          fetchApi("/api/stations")
-        ]);
-        
-        if (Array.isArray(stationsData)) {
-          setStationsList(stationsData);
-          if (stationsData.length > 0) {
-            setNewFromStationId(stationsData[0].id);
-            setNewToStationId(stationsData.length > 1 ? stationsData[1].id : stationsData[0].id);
-          }
-        }
-
+        const ticketsData = await fetchApi("/api/admin/tickets");
         const list = ticketsData.content || ticketsData || [];
         if (Array.isArray(list)) {
           setTickets(list.map((t) => ({
@@ -98,120 +70,6 @@ export default function TicketsPage() {
     }
     loadData();
   }, []);
-
-  const handleOpenCreateModal = () => {
-    setNewUserId("");
-    setNewType("SINGLE_TRIP");
-    setNewMode("METRO");
-    if (stationsList.length > 0) {
-      setNewFromStationId(stationsList[0].id);
-      setNewToStationId(stationsList.length > 1 ? stationsList[1].id : stationsList[0].id);
-    } else {
-      setNewFromStationId("");
-      setNewToStationId("");
-    }
-    setNewPassengerType("NORMAL");
-    setNewValidFrom(new Date().toISOString().substring(0, 10));
-    setNewScope("SINGLE_ROUTE");
-    setNewDurationType("MONTHLY");
-    setNewDurationMonths(1);
-    setModalError(null);
-    setIsModalOpen(true);
-  };
-
-  const handleCreateTicket = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    let ticketPrice = 13000;
-    if (newType === "MONTHLY_PASS") {
-      const basePrice = newMode === "ANY" ? 200000 : 100000;
-      if (newDurationType === "MONTHLY") {
-        ticketPrice = basePrice * newDurationMonths;
-      } else if (newDurationType === "WEEKLY") {
-        ticketPrice = Math.round(basePrice * 0.25);
-      } else if (newDurationType === "DAILY") {
-        ticketPrice = Math.round(basePrice * 0.05);
-      }
-    } else {
-      ticketPrice = newMode === "BUS" ? 7000 : 13000;
-    }
-
-    // Apply passenger type discount
-    if (newPassengerType === "STUDENT") ticketPrice *= 0.5;
-    else if (newPassengerType === "SENIOR") ticketPrice *= 0.7;
-    else if (newPassengerType === "PRIORITY") ticketPrice = 0;
-
-    const validToDate = new Date(newValidFrom);
-    if (newType === "MONTHLY_PASS") {
-      if (newDurationType === "MONTHLY") {
-        validToDate.setMonth(validToDate.getMonth() + newDurationMonths);
-      } else if (newDurationType === "WEEKLY") {
-        validToDate.setDate(validToDate.getDate() + 7);
-      } else if (newDurationType === "DAILY") {
-        validToDate.setDate(validToDate.getDate() + 1);
-      }
-    }
-
-    const getStationCode = (id: string) => {
-      const found = stationsList.find(s => s.id === id);
-      return found ? found.code : "N/A";
-    };
-
-    try {
-      let issuedTicket;
-      if (newType === "SINGLE_TRIP") {
-        const body: any = {
-          userId: newUserId.trim(),
-          fromStationId: newFromStationId,
-          toStationId: newToStationId,
-          mode: newMode
-        };
-        if (newPassengerType !== "NORMAL") {
-          body.passengerType = newPassengerType;
-        }
-        issuedTicket = await fetchApi("/api/tickets/single-trip", {
-          method: "POST",
-          body: JSON.stringify(body)
-        });
-      } else {
-        const body: any = {
-          userId: newUserId.trim(),
-          mode: newMode,
-          scope: newScope,
-          validFrom: newValidFrom,
-          durationType: newDurationType,
-          durationMonths: newDurationType === "MONTHLY" ? newDurationMonths : null
-        };
-        if (newPassengerType !== "NORMAL") {
-          body.passengerType = newPassengerType;
-        }
-        issuedTicket = await fetchApi("/api/admin/tickets/issue", {
-          method: "POST",
-          body: JSON.stringify(body)
-        });
-      }
-
-      const newTk: TicketItem = {
-        ticketId: issuedTicket.ticketId || issuedTicket.id,
-        type: issuedTicket.type || newType,
-        mode: issuedTicket.mode || newMode,
-        scope: issuedTicket.scope || (newType === "SINGLE_TRIP" ? "STATION_TO_STATION" : newScope),
-        status: issuedTicket.status || "ACTIVE",
-        fromStationCode: newType === "SINGLE_TRIP" ? (issuedTicket.fromStationCode || getStationCode(newFromStationId)) : "ALL",
-        toStationCode: newType === "SINGLE_TRIP" ? (issuedTicket.toStationCode || getStationCode(newToStationId)) : "ALL",
-        price: issuedTicket.price !== undefined ? issuedTicket.price : ticketPrice,
-        validFrom: issuedTicket.validFrom || newValidFrom,
-        validTo: issuedTicket.validTo || validToDate.toISOString().substring(0, 10),
-        purchasedAt: issuedTicket.purchasedAt ? new Date(issuedTicket.purchasedAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16),
-        qrToken: issuedTicket.qrToken || ("QR-" + newType + "-" + Math.random().toString(36).substring(2, 12).toUpperCase())
-      };
-      setTickets([newTk, ...tickets]);
-      setIsModalOpen(false);
-    } catch (err: any) {
-      console.warn("Ticket issue API failed. Error:", err.message);
-      setModalError(`Lỗi phát hành vé: ${err.message || "Không thể thực hiện."}`);
-    }
-  };
 
   const handleShowQr = (tk: TicketItem) => {
     setSelectedTicket(tk);
@@ -256,12 +114,6 @@ export default function TicketsPage() {
             Theo dõi, phát hành và kiểm soát trạng thái các loại vé lượt, vé tháng liên thông FMC.
           </p>
         </div>
-        <button
-          onClick={handleOpenCreateModal}
-          className="flex items-center gap-2 px-4 py-2 bg-secondary text-on-secondary rounded-full hover:opacity-90 transition-opacity font-label-caps text-xs uppercase cursor-pointer"
-        >
-          <Plus className="h-4 w-4" /> Phát hành vé mới
-        </button>
       </div>
 
       {/* Summary Cards */}
@@ -423,223 +275,7 @@ export default function TicketsPage() {
         </div>
       </div>
 
-      {/* Issuance Ticket Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setIsModalOpen(false)}
-          />
-          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl w-full max-w-md p-6 z-10">
-            <div className="flex justify-between items-center pb-3 border-b border-outline-variant mb-4">
-              <h3 className="text-lg font-bold text-on-surface">
-                Phát Hành Vé Hệ Thống Mới
-              </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 hover:bg-surface-container-high rounded-full text-on-surface-variant cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
 
-            <form onSubmit={handleCreateTicket} className="space-y-4">
-              {modalError && (
-                <div className="px-4 py-2.5 bg-error-container text-on-error-container text-xs rounded-lg flex items-center justify-between border border-error/20">
-                  <span className="flex items-center gap-2 font-medium">
-                    <AlertTriangle className="h-4 w-4 text-error font-semibold" /> {modalError}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setModalError(null)}
-                    className="p-1 hover:bg-error-container/20 rounded cursor-pointer"
-                  >
-                    <X className="h-3.5 w-3.5 text-on-error-container" />
-                  </button>
-                </div>
-              )}
-              <div>
-                <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Mã người dùng
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Nhập UUID người dùng"
-                  value={newUserId}
-                  onChange={(e) => setNewUserId(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                    Loại vé
-                  </label>
-                  <select
-                    value={newType}
-                    onChange={(e) => setNewType(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
-                  >
-                    <option value="SINGLE_TRIP">Vé lượt</option>
-                    <option value="MONTHLY_PASS">Vé tháng</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                    Phương thức liên thông
-                  </label>
-                  <select
-                    value={newMode}
-                    onChange={(e) => setNewMode(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
-                  >
-                    <option value="METRO">Metro duy nhất</option>
-                    <option value="BUS">Bus duy nhất</option>
-                    <option value="ANY">Liên thông</option>
-                  </select>
-                </div>
-              </div>
-
-              {newType === "SINGLE_TRIP" && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                      Ga xuất phát
-                    </label>
-                    <select
-                      value={newFromStationId}
-                      onChange={(e) => setNewFromStationId(e.target.value)}
-                      className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
-                    >
-                      {stationsList.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.code} ({s.name})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                      Ga kết thúc
-                    </label>
-                    <select
-                      value={newToStationId}
-                      onChange={(e) => setNewToStationId(e.target.value)}
-                      className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
-                    >
-                      {stationsList.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.code} ({s.name})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {newType === "MONTHLY_PASS" && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                        Phạm vi vé
-                      </label>
-                      <select
-                        value={newScope}
-                        onChange={(e) => setNewScope(e.target.value as any)}
-                        className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
-                      >
-                        <option value="SINGLE_ROUTE">Một tuyến</option>
-                        <option value="MULTI_ROUTE">Liên tuyến</option>
-                        <option value="STATION_TO_STATION">Ga đến ga</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                        Loại kỳ hạn
-                      </label>
-                      <select
-                        value={newDurationType}
-                        onChange={(e) => setNewDurationType(e.target.value as any)}
-                        className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
-                      >
-                        <option value="MONTHLY">Hàng tháng</option>
-                        <option value="DAILY">Hàng ngày</option>
-                        <option value="WEEKLY">Hàng tuần</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {newDurationType === "MONTHLY" && (
-                    <div>
-                      <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                        Số tháng hiệu lực (1 - 12)
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={12}
-                        required
-                        value={newDurationMonths}
-                        onChange={(e) => setNewDurationMonths(parseInt(e.target.value) || 1)}
-                        className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                    Nhóm hành khách
-                  </label>
-                  <select
-                    value={newPassengerType}
-                    onChange={(e) => setNewPassengerType(e.target.value)}
-                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
-                  >
-                    <option value="NORMAL">Bình thường (100% giá)</option>
-                    <option value="STUDENT">Học sinh / Sinh viên (50%)</option>
-                    <option value="SENIOR">Người cao tuổi (70%)</option>
-                    <option value="PRIORITY">Đối tượng ưu tiên</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                    Ngày có hiệu lực
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={newValidFrom}
-                    onChange={(e) => setNewValidFrom(e.target.value)}
-                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-3 justify-end pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-outline-variant rounded text-on-surface-variant hover:bg-surface-container-high transition-colors text-xs font-semibold uppercase cursor-pointer"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-secondary text-on-secondary rounded hover:bg-secondary-container transition-colors text-xs font-semibold uppercase cursor-pointer"
-                >
-                  Phát hành vé
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* QR Code Details Modal */}
       {isQrModalOpen && selectedTicket && (

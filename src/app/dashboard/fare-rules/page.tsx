@@ -33,6 +33,7 @@ interface FareRule {
   effectiveTo: string;
   status: "ACTIVE" | "INACTIVE";
   passPrices: PassPrice[];
+  version?: number;
 }
 
 export default function FareRulesPage() {
@@ -81,10 +82,28 @@ export default function FareRulesPage() {
   const [effectiveFrom, setEffectiveFrom] = useState("2026-01-01");
   const [effectiveTo, setEffectiveTo] = useState("2026-12-31");
   
-  // Pass Prices Configuration list
-  const [passPrices, setPassPrices] = useState<PassPrice[]>([
+  // Pass Prices Configuration lists by transit mode
+  const [metroPassPrices, setMetroPassPrices] = useState<PassPrice[]>([
+    { durationType: "DAILY", durationMonths: 1, scope: null, amount: 20000 }
+  ]);
+  const [busPassPrices, setBusPassPrices] = useState<PassPrice[]>([
     { durationType: "DAILY", durationMonths: 1, scope: "MULTI_ROUTE", amount: 20000 }
   ]);
+  const [anyPassPrices, setAnyPassPrices] = useState<PassPrice[]>([
+    { durationType: "DAILY", durationMonths: 1, scope: null, amount: 20000 }
+  ]);
+
+  const getActivePassPrices = () => {
+    if (mode === "METRO") return metroPassPrices;
+    if (mode === "BUS") return busPassPrices;
+    return anyPassPrices;
+  };
+
+  const setActivePassPrices = (prices: PassPrice[]) => {
+    if (mode === "METRO") setMetroPassPrices(prices);
+    else if (mode === "BUS") setBusPassPrices(prices);
+    else setAnyPassPrices(prices);
+  };
 
   useEffect(() => {
     async function loadRules() {
@@ -123,7 +142,13 @@ export default function FareRulesPage() {
     setMaxPrice(15000);
     setEffectiveFrom("2026-01-01");
     setEffectiveTo("2026-12-31");
-    setPassPrices([
+    setMetroPassPrices([
+      { durationType: "DAILY", durationMonths: 1, scope: null, amount: 20000 }
+    ]);
+    setBusPassPrices([
+      { durationType: "DAILY", durationMonths: 1, scope: "MULTI_ROUTE", amount: 20000 }
+    ]);
+    setAnyPassPrices([
       { durationType: "DAILY", durationMonths: 1, scope: null, amount: 20000 }
     ]);
     setModalError(null);
@@ -141,36 +166,67 @@ export default function FareRulesPage() {
     setMaxPrice(rule.maxPrice);
     setEffectiveFrom(rule.effectiveFrom);
     setEffectiveTo(rule.effectiveTo);
-    setPassPrices(rule.passPrices && rule.passPrices.length > 0 ? rule.passPrices.map(p => ({
-      durationType: p.durationType,
+    
+    const loadedPrices: PassPrice[] = rule.passPrices && rule.passPrices.length > 0 ? rule.passPrices.map(p => ({
+      durationType: p.durationType as any,
       durationMonths: p.durationMonths || 1,
       scope: rule.mode === "BUS" ? (p.scope || "MULTI_ROUTE") : null,
       amount: p.amount
     })) : [
       { durationType: "DAILY", durationMonths: 1, scope: rule.mode === "BUS" ? "MULTI_ROUTE" : null, amount: 20000 }
-    ]);
+    ];
+
+    if (rule.mode === "METRO") {
+      setMetroPassPrices(loadedPrices);
+      setBusPassPrices([
+        { durationType: "DAILY", durationMonths: 1, scope: "MULTI_ROUTE", amount: 20000 }
+      ]);
+      setAnyPassPrices([
+        { durationType: "DAILY", durationMonths: 1, scope: null, amount: 20000 }
+      ]);
+    } else if (rule.mode === "BUS") {
+      setBusPassPrices(loadedPrices);
+      setMetroPassPrices([
+        { durationType: "DAILY", durationMonths: 1, scope: null, amount: 20000 }
+      ]);
+      setAnyPassPrices([
+        { durationType: "DAILY", durationMonths: 1, scope: null, amount: 20000 }
+      ]);
+    } else {
+      setAnyPassPrices(loadedPrices);
+      setMetroPassPrices([
+        { durationType: "DAILY", durationMonths: 1, scope: null, amount: 20000 }
+      ]);
+      setBusPassPrices([
+        { durationType: "DAILY", durationMonths: 1, scope: "MULTI_ROUTE", amount: 20000 }
+      ]);
+    }
+    
     setModalError(null);
     setIsModalOpen(true);
   };
 
   const handleAddPassPrice = () => {
-    setPassPrices([
-      ...passPrices,
+    const current = getActivePassPrices();
+    setActivePassPrices([
+      ...current,
       { durationType: "DAILY", durationMonths: 1, scope: mode === "BUS" ? "MULTI_ROUTE" : null, amount: 20000 }
     ]);
   };
 
   const handleRemovePassPrice = (index: number) => {
-    if (passPrices.length <= 1) {
+    const current = getActivePassPrices();
+    if (current.length <= 1) {
       alert("Yêu cầu cần có ít nhất 1 mức giá vé định kỳ!");
       return;
     }
-    setPassPrices(passPrices.filter((_, idx) => idx !== index));
+    setActivePassPrices(current.filter((_, idx) => idx !== index));
   };
 
   const handleUpdatePassPrice = (index: number, field: keyof PassPrice, value: any) => {
-    setPassPrices(
-      passPrices.map((p, idx) => {
+    const current = getActivePassPrices();
+    setActivePassPrices(
+      current.map((p, idx) => {
         if (idx === index) {
           return { ...p, [field]: value };
         }
@@ -224,7 +280,8 @@ export default function FareRulesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const formattedPassPrices = passPrices.map(p => ({
+    const current = getActivePassPrices();
+    const formattedPassPrices = current.map(p => ({
       durationType: p.durationType,
       durationMonths: p.durationType === "MONTHLY" ? p.durationMonths : null,
       scope: mode === "BUS" ? (p.scope || "MULTI_ROUTE") : null,
@@ -266,7 +323,7 @@ export default function FareRulesPage() {
           effectiveFrom: newRule.effectiveFrom || effectiveFrom,
           effectiveTo: newRule.effectiveTo || effectiveTo,
           status: newRule.status || "ACTIVE",
-          passPrices: newRule.passPrices || passPrices
+          passPrices: newRule.passPrices || current
         }]);
         setIsModalOpen(false);
       } catch (err: any) {
@@ -300,7 +357,7 @@ export default function FareRulesPage() {
                   maxPrice: updatedRule.maxPrice !== undefined ? updatedRule.maxPrice : maxPrice,
                   effectiveFrom: updatedRule.effectiveFrom || effectiveFrom,
                   effectiveTo: updatedRule.effectiveTo || effectiveTo,
-                  passPrices: updatedRule.passPrices || passPrices
+                  passPrices: updatedRule.passPrices || current
                 }
               : r
           )
@@ -313,10 +370,46 @@ export default function FareRulesPage() {
     }
   };
 
-  const filteredRules = rules.filter((r) => {
-    const matchesMode = modeFilter === "ALL" || r.mode === modeFilter;
-    return matchesMode;
-  });
+  // Helper to compute versions for each rule code group
+  const getRulesWithVersionsAndSorted = () => {
+    const groups: Record<string, FareRule[]> = {};
+    rules.forEach(r => {
+      if (!groups[r.code]) {
+        groups[r.code] = [];
+      }
+      groups[r.code].push(r);
+    });
+
+    const ruleIdToVersion: Record<string, number> = {};
+    Object.keys(groups).forEach(code => {
+      groups[code].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+      groups[code].forEach((r, idx) => {
+        ruleIdToVersion[r.id] = idx + 1;
+      });
+    });
+
+    const filtered = rules.filter((r) => {
+      const matchesMode = modeFilter === "ALL" || r.mode === modeFilter;
+      return matchesMode;
+    });
+
+    const withVersions = filtered.map(r => ({
+      ...r,
+      version: ruleIdToVersion[r.id] || 1
+    }));
+
+    withVersions.sort((a, b) => {
+      if (a.status === b.status) {
+        if (a.code !== b.code) {
+          return a.code.localeCompare(b.code);
+        }
+        return b.version - a.version;
+      }
+      return a.status === "ACTIVE" ? -1 : 1;
+    });
+
+    return withVersions;
+  };
 
   return (
     <div className="space-y-6">
@@ -431,14 +524,19 @@ export default function FareRulesPage() {
               </tr>
             </thead>
             <tbody className="font-body-sm text-body-sm text-xs">
-              {filteredRules.length > 0 ? (
-                filteredRules.map((rule) => (
+              {getRulesWithVersionsAndSorted().length > 0 ? (
+                getRulesWithVersionsAndSorted().map((rule) => (
                   <tr
                     key={rule.id}
                     className="border-b border-outline-variant hover:bg-surface-container-low transition-colors h-[48px]"
                   >
                     <td className="p-table-cell-padding text-on-surface font-semibold font-data-mono whitespace-nowrap">
-                      {rule.code}
+                      <div className="flex items-center gap-1.5">
+                        <span>{rule.code}</span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-secondary-container text-on-secondary-container font-semibold font-sans">
+                          v{rule.version}
+                        </span>
+                      </div>
                     </td>
                     <td className="p-table-cell-padding whitespace-nowrap">
                       <span
@@ -735,8 +833,8 @@ export default function FareRulesPage() {
                 </div>
 
                 <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
-                  {passPrices.map((p, idx) => (
-                    <div key={idx} className="flex gap-2 items-end bg-surface-container-low p-2 rounded border border-outline-variant relative">
+                  {getActivePassPrices().map((p, idx) => (
+                    <div key={`${mode}-${idx}`} className="flex gap-2 items-end bg-surface-container-low p-2 rounded border border-outline-variant relative">
                       <div className={mode === "BUS" ? "w-[30%]" : (p.durationType === "MONTHLY" ? "w-[40%]" : "w-[45%]")}>
                         <label className="block text-[9px] text-outline mb-0.5">Kỳ hạn</label>
                         <select

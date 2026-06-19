@@ -455,6 +455,20 @@ export default function CardsPage() {
     return matchesStatus && matchesType;
   });
 
+  const cardStatusPriority: Record<string, number> = {
+    ACTIVE: 1,
+    ISSUED: 2,
+    SUSPENDED: 3,
+    REVOKED: 4
+  };
+
+  const sortedCards = [...filteredCards].sort((a, b) => {
+    const pA = cardStatusPriority[a.status] || 5;
+    const pB = cardStatusPriority[b.status] || 5;
+    if (pA !== pB) return pA - pB;
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+
   return (
     <div className="space-y-6">
       {isOffline && (
@@ -586,8 +600,8 @@ export default function CardsPage() {
               </tr>
             </thead>
             <tbody className="font-body-sm text-body-sm text-xs">
-              {filteredCards.length > 0 ? (
-                filteredCards.map((card) => (
+              {sortedCards.length > 0 ? (
+                sortedCards.map((card) => (
                   <tr
                     key={card.id}
                     className="border-b border-outline-variant hover:bg-surface-container-low transition-colors h-[48px]"

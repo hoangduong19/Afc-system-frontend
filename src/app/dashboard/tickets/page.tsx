@@ -224,6 +224,19 @@ export default function TicketsPage() {
     return matchesType && matchesStatus;
   });
 
+  const ticketStatusPriority: Record<string, number> = {
+    ACTIVE: 1,
+    USED: 2,
+    EXPIRED: 3
+  };
+
+  const sortedTickets = [...filteredTickets].sort((a, b) => {
+    const pA = ticketStatusPriority[a.status] || 4;
+    const pB = ticketStatusPriority[b.status] || 4;
+    if (pA !== pB) return pA - pB;
+    return b.purchasedAt.localeCompare(a.purchasedAt);
+  });
+
   return (
     <div className="space-y-6">
       {isOffline && (
@@ -338,8 +351,8 @@ export default function TicketsPage() {
               </tr>
             </thead>
             <tbody className="font-body-sm text-body-sm text-xs">
-              {filteredTickets.length > 0 ? (
-                filteredTickets.map((tk) => (
+              {sortedTickets.length > 0 ? (
+                sortedTickets.map((tk) => (
                   <tr
                     key={tk.ticketId}
                     className="border-b border-outline-variant hover:bg-surface-container-low transition-colors h-[48px]"

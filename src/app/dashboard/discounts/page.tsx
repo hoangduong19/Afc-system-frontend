@@ -23,6 +23,7 @@ interface FareDiscount {
   effectiveFrom: string;
   effectiveTo: string;
   status: "ACTIVE" | "INACTIVE";
+  version?: number;
 }
 
 export default function DiscountsPage() {
@@ -193,9 +194,45 @@ export default function DiscountsPage() {
     }
   };
 
-  const filteredDiscounts = discounts.filter((ds) => {
-    return passengerFilter === "ALL" || ds.passengerType === passengerFilter;
-  });
+  // Helper to compute versions for each passengerType group
+  const getDiscountsWithVersionsAndSorted = () => {
+    const groups: Record<string, FareDiscount[]> = {};
+    discounts.forEach(d => {
+      if (!groups[d.passengerType]) {
+        groups[d.passengerType] = [];
+      }
+      groups[d.passengerType].push(d);
+    });
+
+    const discountIdToVersion: Record<string, number> = {};
+    Object.keys(groups).forEach(type => {
+      groups[type].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+      groups[type].forEach((d, idx) => {
+        discountIdToVersion[d.id] = idx + 1;
+      });
+    });
+
+    const filtered = discounts.filter((ds) => {
+      return passengerFilter === "ALL" || ds.passengerType === passengerFilter;
+    });
+
+    const withVersions = filtered.map(d => ({
+      ...d,
+      version: discountIdToVersion[d.id] || 1
+    }));
+
+    withVersions.sort((a, b) => {
+      if (a.status === b.status) {
+        if (a.passengerType !== b.passengerType) {
+          return a.passengerType.localeCompare(b.passengerType);
+        }
+        return b.version - a.version;
+      }
+      return a.status === "ACTIVE" ? -1 : 1;
+    });
+
+    return withVersions;
+  };
 
   return (
     <div className="space-y-6">
@@ -270,18 +307,25 @@ export default function DiscountsPage() {
               </tr>
             </thead>
             <tbody className="font-body-sm text-body-sm text-xs">
-              {filteredDiscounts.length > 0 ? (
-                filteredDiscounts.map((ds) => (
+              {getDiscountsWithVersionsAndSorted().length > 0 ? (
+                getDiscountsWithVersionsAndSorted().map((ds) => (
                   <tr
                     key={ds.id}
                     className="border-b border-outline-variant hover:bg-surface-container-low transition-colors h-[48px]"
                   >
                     <td className="p-table-cell-padding text-on-surface font-semibold whitespace-nowrap">
-                      {ds.passengerType === "STUDENT"
-                        ? "Học sinh / Sinh viên"
-                        : ds.passengerType === "SENIOR"
-                        ? "Người cao tuổi"
-                        : "Đối tượng ưu tiên"}
+                      <div className="flex items-center gap-1.5">
+                        <span>
+                          {ds.passengerType === "STUDENT"
+                            ? "Học sinh / Sinh viên"
+                            : ds.passengerType === "SENIOR"
+                            ? "Người cao tuổi"
+                            : "Đối tượng ưu tiên"}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-secondary-container text-on-secondary-container font-semibold font-sans">
+                          v{ds.version}
+                        </span>
+                      </div>
                     </td>
                     <td className="p-table-cell-padding text-on-surface-variant font-medium whitespace-nowrap">
                       {ds.discountType === "PERCENT" ? "Giảm theo phần trăm (%)" : "Giảm trừ tiền mặt cố định (đ)"}

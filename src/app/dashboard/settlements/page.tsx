@@ -12,7 +12,6 @@ import {
   XCircle,
   TrendingUp,
   FileText,
-  Upload,
   ArrowRight,
   TrendingDown,
   Info,
@@ -95,7 +94,6 @@ export default function SettlementsPage() {
   const [isOffline, setIsOffline] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Local tracking for paid status of operators per period
   const [paidShares, setPaidShares] = useState<Record<string, string[]>>({});
@@ -109,7 +107,6 @@ export default function SettlementsPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedUploadPeriod, setSelectedUploadPeriod] = useState("2026-06");
-  const [dragActive, setDragActive] = useState(false);
 
   // Compute periods from raw settlements
   const periods = React.useMemo<SettlementPeriod[]>(() => {
@@ -231,30 +228,7 @@ export default function SettlementsPage() {
     loadLogs();
   }, [selectedPeriod, activePeriodInfo?.id]);
 
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
-    }
-  };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setSelectedFile(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
-    }
-  };
 
   const startSettlementRun = async () => {
     if (!selectedUploadPeriod) return;
@@ -274,7 +248,6 @@ export default function SettlementsPage() {
 
       setRawSettlements(prev => [s, ...prev.filter(p => p.period !== selectedUploadPeriod)]);
       setSelectedPeriod(selectedUploadPeriod);
-      setSelectedFile(null);
       setIsReconcileModalOpen(false);
     } catch (err: any) {
       console.error("POST run settlement failed. Error:", err);
@@ -378,7 +351,6 @@ export default function SettlementsPage() {
           <button
             onClick={() => {
               setModalError(null);
-              setSelectedFile(null);
               setIsReconcileModalOpen(true);
             }}
             className="flex items-center justify-center gap-2 px-4 py-2 bg-secondary text-on-secondary rounded-full hover:opacity-90 transition-opacity font-label-caps text-xs uppercase cursor-pointer w-full sm:w-auto"
@@ -748,51 +720,6 @@ export default function SettlementsPage() {
                 </p>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Tải lên tệp log bổ sung ngoài hệ thống (Tùy chọn):
-                </label>
-                
-                <div
-                  onDragEnter={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDragOver={handleDrag}
-                  onDrop={handleDrop}
-                  className={`border-2 border-dashed rounded-xl p-8 text-center flex flex-col items-center justify-center gap-3 transition-colors cursor-pointer relative ${
-                    dragActive
-                      ? "border-secondary bg-secondary/5"
-                      : "border-outline-variant hover:border-secondary bg-surface-bright"
-                  } ${isUploading ? "pointer-events-none opacity-60" : ""}`}
-                >
-                  <input
-                    type="file"
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    onChange={handleFileChange}
-                    disabled={isUploading}
-                    accept=".csv,.xlsx,.xls,.json"
-                  />
-                  <Upload className="h-10 w-10 text-outline opacity-65" />
-                  <div>
-                    <p className="text-xs font-semibold text-on-surface">
-                      {selectedFile ? `Đã chọn tệp: ${selectedFile.name}` : "Click để chọn tệp hoặc kéo thả tệp tại đây"}
-                    </p>
-                    {selectedFile && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setSelectedFile(null);
-                        }}
-                        className="mt-2 px-2 py-0.5 bg-error/10 text-error hover:bg-error/20 rounded text-[10px] font-semibold cursor-pointer z-20 relative"
-                      >
-                        Gỡ bỏ tệp
-                      </button>
-                    )}
-                    <p className="text-[10px] text-on-surface-variant mt-1">Dung lượng tối đa: 50MB</p>
-                  </div>
-                </div>
-              </div>
 
               {isUploading && (
                 <div className="space-y-2 p-3 bg-surface-container-high border border-outline-variant rounded-lg flex flex-col items-center justify-center">

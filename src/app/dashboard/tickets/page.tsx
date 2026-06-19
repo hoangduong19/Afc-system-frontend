@@ -44,6 +44,7 @@ export default function TicketsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<TicketItem | null>(null);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   // Form States for creating new ticket
   const [newUserId, setNewUserId] = useState("");
@@ -114,6 +115,7 @@ export default function TicketsPage() {
     setNewScope("SINGLE_ROUTE");
     setNewDurationType("MONTHLY");
     setNewDurationMonths(1);
+    setModalError(null);
     setIsModalOpen(true);
   };
 
@@ -204,27 +206,11 @@ export default function TicketsPage() {
         qrToken: issuedTicket.qrToken || ("QR-" + newType + "-" + Math.random().toString(36).substring(2, 12).toUpperCase())
       };
       setTickets([newTk, ...tickets]);
+      setIsModalOpen(false);
     } catch (err: any) {
-      console.warn("Ticket issue API failed, using mock local state. Error:", err.message);
-      setIsOffline(true);
-
-      const newTk: TicketItem = {
-        ticketId: "tk-" + Math.floor(1000 + Math.random() * 9000) + "-" + Math.random().toString(36).substring(2, 4),
-        type: newType,
-        mode: newMode,
-        scope: newType === "SINGLE_TRIP" ? "STATION_TO_STATION" : newScope,
-        status: "ACTIVE",
-        fromStationCode: newType === "SINGLE_TRIP" ? getStationCode(newFromStationId) : "ALL",
-        toStationCode: newType === "SINGLE_TRIP" ? getStationCode(newToStationId) : "ALL",
-        price: ticketPrice,
-        validFrom: newValidFrom,
-        validTo: validToDate.toISOString().substring(0, 10),
-        purchasedAt: new Date().toISOString().replace("T", " ").substring(0, 16),
-        qrToken: "QR-" + newType + "-" + Math.random().toString(36).substring(2, 12).toUpperCase()
-      };
-      setTickets([newTk, ...tickets]);
+      console.warn("Ticket issue API failed. Error:", err.message);
+      setModalError(`Lỗi phát hành vé: ${err.message || "Không thể thực hiện."}`);
     }
-    setIsModalOpen(false);
   };
 
   const handleShowQr = (tk: TicketItem) => {
@@ -445,6 +431,20 @@ export default function TicketsPage() {
             </div>
 
             <form onSubmit={handleCreateTicket} className="space-y-4">
+              {modalError && (
+                <div className="px-4 py-2.5 bg-error-container text-on-error-container text-xs rounded-lg flex items-center justify-between border border-error/20">
+                  <span className="flex items-center gap-2 font-medium">
+                    <AlertTriangle className="h-4 w-4 text-error font-semibold" /> {modalError}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setModalError(null)}
+                    className="p-1 hover:bg-error-container/20 rounded cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5 text-on-error-container" />
+                  </button>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1">
                   Mã người dùng

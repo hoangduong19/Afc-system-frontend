@@ -68,6 +68,14 @@ export default function CardsPage() {
   const [userId, setUserId] = useState("");
   const [supportsMetro, setSupportsMetro] = useState(true);
   const [supportsBus, setSupportsBus] = useState(true);
+  const [issuanceType, setIssuanceType] = useState<"ANON" | "IDENTIFIED">("ANON");
+
+  // Ticket creation state inside card issuance
+  const [ticketMode, setTicketMode] = useState<"METRO" | "BUS" | "ANY">("METRO");
+  const [ticketPassengerType, setTicketPassengerType] = useState<string>("");
+  const [ticketDurationType, setTicketDurationType] = useState<"DAILY" | "WEEKLY" | "MONTHLY">("MONTHLY");
+  const [ticketDurationMonths, setTicketDurationMonths] = useState<number>(1);
+  const [ticketValidFrom, setTicketValidFrom] = useState<string>("");
 
   // Ticket link list
   const [availableTickets, setAvailableTickets] = useState<{ id: string; label: string }[]>([]);
@@ -135,6 +143,12 @@ export default function CardsPage() {
     setUserId("");
     setSupportsMetro(true);
     setSupportsBus(true);
+    setIssuanceType("ANON");
+    setTicketMode("METRO");
+    setTicketPassengerType("");
+    setTicketDurationType("MONTHLY");
+    setTicketDurationMonths(1);
+    setTicketValidFrom(new Date().toISOString().substring(0, 10));
     setModalError(null);
     setIsModalOpen(true);
   };
@@ -152,31 +166,77 @@ export default function CardsPage() {
     e.preventDefault();
     setModalError(null);
     try {
-      const newCard = await fetchApi("/api/cards", {
-        method: "POST",
-        body: JSON.stringify({
-          cardUid: uid,
-          userId: userId.trim() || null,
-          supportsMetro,
-          supportsBus
-        })
-      });
-      
-      const createdCard: TransportCard = {
-        id: newCard.id,
-        uid: newCard.cardUid,
-        passengerType: newCard.type || "ANON",
-        status: newCard.status || "ISSUED",
-        supportsMetro: !!newCard.supportsMetro,
-        supportsBus: !!newCard.supportsBus,
-        linkedUserId: newCard.linkedUserId || null,
-        linkedTicket: newCard.linkedUserId ? "Đã liên kết" : null,
-        createdAt: newCard.createdAt ? new Date(newCard.createdAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16)
-      };
-      setCards([createdCard, ...cards]);
-      setIsModalOpen(false);
+      const cleanUid = uid.trim() || null;
+      if (issuanceType === "ANON") {
+        // Issue anonymous card
+        await fetchApi("/api/cards", {
+          method: "POST",
+          body: JSON.stringify({
+            cardUid: cleanUid,
+            userId: null,
+            supportsMetro,
+            supportsBus
+          })
+        });
+        await loadData();
+        setIsModalOpen(false);
+      } else {
+        // Issue identified card with ticket
+        const targetUserId = userId.trim();
+        if (!targetUserId) {
+          setModalError("Vui lòng nhập Mã người dùng cho thẻ định danh!");
+          return;
+        }
+
+        // Validate UUID
+        const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+        if (!uuidRegex.test(targetUserId)) {
+          setModalError("Mã người dùng không hợp lệ (phải ở định dạng UUID)!");
+          return;
+        }
+
+        // Prepare ticket request body
+        const ticketPayload: any = {
+          userId: targetUserId,
+          mode: ticketMode,
+          passengerType: ticketPassengerType || null,
+          validFrom: ticketValidFrom,
+          durationType: ticketDurationType
+        };
+
+        // Rule: BUS requires MULTI_ROUTE scope, METRO/ANY must have null scope
+        if (ticketMode === "BUS") {
+          ticketPayload.scope = "MULTI_ROUTE";
+        } else {
+          ticketPayload.scope = null;
+        }
+
+        // Rule: durationMonths required for MONTHLY, must be null otherwise
+        if (ticketDurationType === "MONTHLY") {
+          ticketPayload.durationMonths = ticketDurationMonths;
+        } else {
+          ticketPayload.durationMonths = null;
+        }
+
+        const payload = {
+          card: {
+            cardUid: cleanUid,
+            userId: targetUserId,
+            supportsMetro,
+            supportsBus
+          },
+          ticket: ticketPayload
+        };
+
+        await fetchApi("/api/issuance/cards", {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        await loadData();
+        setIsModalOpen(false);
+      }
     } catch (err: any) {
-      console.warn("POST /api/cards failed. Error:", err.message);
+      console.warn("POST card failed. Error:", err.message);
       setModalError(`Lỗi phát hành thẻ: ${err.message || "Không thể thực hiện."}`);
     }
   };
@@ -654,7 +714,7 @@ export default function CardsPage() {
             className="fixed inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setIsModalOpen(false)}
           />
-          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl w-full max-w-md p-6 z-10">
+          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl w-full max-w-lg p-6 z-10 max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center pb-3 border-b border-outline-variant mb-4">
               <h3 className="text-lg font-bold text-on-surface">Phát Hành Thẻ Vật Lý Mới</h3>
               <button
@@ -665,11 +725,11 @@ export default function CardsPage() {
               </button>
             </div>
 
-            <form onSubmit={handleIssueCard} className="space-y-4">
+            <form onSubmit={handleIssueCard} className="space-y-4 overflow-y-auto pr-1 flex-1">
               {modalError && (
                 <div className="px-4 py-2.5 bg-error-container text-on-error-container text-xs rounded-lg flex items-center justify-between border border-error/20">
                   <span className="flex items-center gap-2 font-medium">
-                    <AlertTriangle className="h-4 w-4 text-error" /> {modalError}
+                    <AlertTriangle className="h-4 w-4 text-error font-semibold" /> {modalError}
                   </span>
                   <button
                     type="button"
@@ -680,33 +740,63 @@ export default function CardsPage() {
                   </button>
                 </div>
               )}
+
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Mã thẻ định danh
+                  Phân loại phát hành
+                </label>
+                <select
+                  value={issuanceType}
+                  onChange={(e) => setIssuanceType(e.target.value as "ANON" | "IDENTIFIED")}
+                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer font-medium"
+                >
+                  <option value="ANON">Thẻ vô danh (Không định danh)</option>
+                  <option value="IDENTIFIED">Thẻ định danh & Kèm vé đăng ký</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                  Mã thẻ định danh (UID) - Tùy chọn
                 </label>
                 <input
                   type="text"
-                  required
                   value={uid}
                   onChange={(e) => setUid(e.target.value)}
                   className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Mã người dùng liên kết - Tùy chọn
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: 33333333-3333-3333-3333-333333333333"
-                  value={userId}
-                  onChange={(e) => setUserId(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
-                />
-              </div>
+              {issuanceType === "IDENTIFIED" ? (
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                    Mã người dùng liên kết (User ID)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ví dụ: cfe1a485-78d4-4f15-9fe5-1ee6a04d7e14"
+                    value={userId}
+                    onChange={(e) => setUserId(e.target.value)}
+                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs font-semibold text-on-surface-variant mb-1">
+                    Mã người dùng liên kết - Tùy chọn
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: cfe1a485-78d4-4f15-9fe5-1ee6a04d7e14"
+                    value={userId}
+                    onChange={(e) => setUserId(e.target.value)}
+                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
+                  />
+                </div>
+              )}
 
-              <div className="flex gap-6 py-2">
+              <div className="flex gap-6 py-1">
                 <label className="flex items-center gap-2 text-sm text-on-surface cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -728,7 +818,107 @@ export default function CardsPage() {
                 </label>
               </div>
 
-              <div className="flex gap-3 justify-end pt-4">
+              {issuanceType === "IDENTIFIED" && (
+                <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant space-y-3">
+                  <h4 className="text-xs font-bold text-secondary uppercase tracking-wider">
+                    Cấu hình vé đăng ký kèm theo
+                  </h4>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-on-surface-variant mb-1">
+                        Phương thức vận tải
+                      </label>
+                      <select
+                        value={ticketMode}
+                        onChange={(e) => setTicketMode(e.target.value as "METRO" | "BUS" | "ANY")}
+                        className="w-full px-2.5 py-1.5 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-xs cursor-pointer font-medium"
+                      >
+                        <option value="METRO">Đường sắt (METRO)</option>
+                        <option value="BUS">Xe buýt (BUS)</option>
+                        <option value="ANY">Đa phương thức (ANY)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-on-surface-variant mb-1">
+                        Đối tượng ưu tiên
+                      </label>
+                      <select
+                        value={ticketPassengerType}
+                        onChange={(e) => setTicketPassengerType(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-xs cursor-pointer font-medium"
+                      >
+                        <option value="">Không có (Mặc định)</option>
+                        <option value="STUDENT">Sinh viên (STUDENT)</option>
+                        <option value="SENIOR">Người cao tuổi (SENIOR)</option>
+                        <option value="PRIORITY">Đối tượng ưu tiên (PRIORITY)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-on-surface-variant mb-1">
+                        Kỳ hạn vé
+                      </label>
+                      <select
+                        value={ticketDurationType}
+                        onChange={(e) => setTicketDurationType(e.target.value as "DAILY" | "WEEKLY" | "MONTHLY")}
+                        className="w-full px-2.5 py-1.5 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-xs cursor-pointer font-medium"
+                      >
+                        <option value="DAILY">Theo ngày (DAILY)</option>
+                        <option value="WEEKLY">Theo tuần (WEEKLY)</option>
+                        <option value="MONTHLY">Theo tháng (MONTHLY)</option>
+                      </select>
+                    </div>
+
+                    {ticketDurationType === "MONTHLY" ? (
+                      <div>
+                        <label className="block text-[11px] font-semibold text-on-surface-variant mb-1">
+                          Số tháng hiệu lực (1 - 12)
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          min={1}
+                          max={12}
+                          value={ticketDurationMonths}
+                          onChange={(e) => setTicketDurationMonths(parseInt(e.target.value) || 1)}
+                          className="w-full px-2.5 py-1.5 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-xs font-data-mono font-medium"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-[11px] font-semibold text-on-surface-variant/40 mb-1">
+                          Số tháng hiệu lực
+                        </label>
+                        <input
+                          type="text"
+                          disabled
+                          value="Không áp dụng"
+                          className="w-full px-2.5 py-1.5 bg-surface-variant/20 border border-outline-variant rounded text-on-surface-variant/40 outline-none text-xs font-medium cursor-not-allowed"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-on-surface-variant mb-1">
+                      Ngày bắt đầu hiệu lực
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={ticketValidFrom}
+                      onChange={(e) => setTicketValidFrom(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-xs font-data-mono font-medium"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3 justify-end pt-4 border-t border-outline-variant">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}

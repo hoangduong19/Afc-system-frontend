@@ -17,7 +17,7 @@ import { fetchApi } from "@/lib/api";
 interface PassPrice {
   durationType: "DAILY" | "WEEKLY" | "MONTHLY";
   durationMonths: number;
-  scope: "SINGLE_ROUTE" | "MULTI_ROUTE";
+  scope: "SINGLE_ROUTE" | "MULTI_ROUTE" | null;
   amount: number;
 }
 
@@ -52,6 +52,7 @@ export default function FareRulesPage() {
   const [selectedRule, setSelectedRule] = useState<FareRule | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   // Confirm Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -123,8 +124,9 @@ export default function FareRulesPage() {
     setEffectiveFrom("2026-01-01");
     setEffectiveTo("2026-12-31");
     setPassPrices([
-      { durationType: "DAILY", durationMonths: 1, scope: "MULTI_ROUTE", amount: 20000 }
+      { durationType: "DAILY", durationMonths: 1, scope: null, amount: 20000 }
     ]);
+    setModalError(null);
     setIsModalOpen(true);
   };
 
@@ -142,18 +144,19 @@ export default function FareRulesPage() {
     setPassPrices(rule.passPrices && rule.passPrices.length > 0 ? rule.passPrices.map(p => ({
       durationType: p.durationType,
       durationMonths: p.durationMonths || 1,
-      scope: p.scope,
+      scope: rule.mode === "BUS" ? (p.scope || "MULTI_ROUTE") : null,
       amount: p.amount
     })) : [
-      { durationType: "DAILY", durationMonths: 1, scope: "MULTI_ROUTE", amount: 20000 }
+      { durationType: "DAILY", durationMonths: 1, scope: rule.mode === "BUS" ? "MULTI_ROUTE" : null, amount: 20000 }
     ]);
+    setModalError(null);
     setIsModalOpen(true);
   };
 
   const handleAddPassPrice = () => {
     setPassPrices([
       ...passPrices,
-      { durationType: "DAILY", durationMonths: 1, scope: "MULTI_ROUTE", amount: 20000 }
+      { durationType: "DAILY", durationMonths: 1, scope: mode === "BUS" ? "MULTI_ROUTE" : null, amount: 20000 }
     ]);
   };
 
@@ -224,9 +227,17 @@ export default function FareRulesPage() {
     const formattedPassPrices = passPrices.map(p => ({
       durationType: p.durationType,
       durationMonths: p.durationType === "MONTHLY" ? p.durationMonths : null,
-      scope: p.scope,
+      scope: mode === "BUS" ? (p.scope || "MULTI_ROUTE") : null,
       amount: p.amount
     }));
+
+    if (mode === "BUS") {
+      const hasMulti = formattedPassPrices.some(p => p.scope === "MULTI_ROUTE");
+      if (!hasMulti) {
+        alert("Phương thức Xe buýt (BUS) yêu cầu ít nhất một mức giá vé định kỳ có phạm vi Liên tuyến (MULTI_ROUTE)!");
+        return;
+      }
+    }
 
     if (modalMode === "CREATE") {
       try {
@@ -257,23 +268,10 @@ export default function FareRulesPage() {
           status: newRule.status || "ACTIVE",
           passPrices: newRule.passPrices || passPrices
         }]);
+        setIsModalOpen(false);
       } catch (err: any) {
-        console.warn("POST /api/fare-rules failed, using mock local state. Error:", err.message);
-        setIsOffline(true);
-        const fallbackRule: FareRule = {
-          id: "fr-" + Date.now(),
-          code,
-          mode,
-          baseFare,
-          ratePerKm,
-          minPrice,
-          maxPrice,
-          effectiveFrom,
-          effectiveTo,
-          status: "ACTIVE",
-          passPrices: passPrices
-        };
-        setRules([...rules, fallbackRule]);
+        console.warn("POST /api/fare-rules failed. Error:", err.message);
+        setModalError(`Lỗi thêm quy tắc: ${err.message || "Không thể thực hiện."}`);
       }
     } else if (modalMode === "EDIT" && selectedRule) {
       try {
@@ -307,19 +305,12 @@ export default function FareRulesPage() {
               : r
           )
         );
+        setIsModalOpen(false);
       } catch (err: any) {
-        console.warn("PUT /api/fare-rules failed, using mock local state. Error:", err.message);
-        setIsOffline(true);
-        setRules(
-          rules.map((r) =>
-            r.id === selectedRule.id
-              ? { ...r, code, mode, baseFare, ratePerKm, minPrice, maxPrice, effectiveFrom, effectiveTo, passPrices }
-              : r
-          )
-        );
+        console.warn("PUT /api/fare-rules failed. Error:", err.message);
+        setModalError(`Lỗi cập nhật quy tắc: ${err.message || "Không thể thực hiện."}`);
       }
     }
-    setIsModalOpen(false);
   };
 
   const filteredRules = rules.filter((r) => {
@@ -594,6 +585,20 @@ export default function FareRulesPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {modalError && (
+                <div className="px-4 py-2.5 bg-error-container text-on-error-container text-xs rounded-lg flex items-center justify-between border border-error/20">
+                  <span className="flex items-center gap-2 font-medium">
+                    <AlertTriangle className="h-4 w-4 text-error font-semibold" /> {modalError}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setModalError(null)}
+                    className="p-1 hover:bg-error-container/20 rounded cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5 text-on-error-container" />
+                  </button>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-on-surface-variant mb-1">
@@ -732,7 +737,7 @@ export default function FareRulesPage() {
                 <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
                   {passPrices.map((p, idx) => (
                     <div key={idx} className="flex gap-2 items-end bg-surface-container-low p-2 rounded border border-outline-variant relative">
-                      <div className="w-[30%]">
+                      <div className={mode === "BUS" ? "w-[30%]" : (p.durationType === "MONTHLY" ? "w-[40%]" : "w-[45%]")}>
                         <label className="block text-[9px] text-outline mb-0.5">Kỳ hạn</label>
                         <select
                           value={p.durationType}
@@ -746,7 +751,7 @@ export default function FareRulesPage() {
                       </div>
 
                       {p.durationType === "MONTHLY" && (
-                        <div className="w-[15%]">
+                        <div className={mode === "BUS" ? "w-[15%]" : "w-[20%]"}>
                           <label className="block text-[9px] text-outline mb-0.5">Tháng</label>
                           <input
                             type="number"
@@ -759,19 +764,21 @@ export default function FareRulesPage() {
                         </div>
                       )}
 
-                      <div className={p.durationType === "MONTHLY" ? "w-[25%]" : "w-[40%]"}>
-                        <label className="block text-[9px] text-outline mb-0.5">Phạm vi</label>
-                        <select
-                          value={p.scope}
-                          onChange={(e) => handleUpdatePassPrice(idx, "scope", e.target.value as any)}
-                          className="w-full px-2 py-1 bg-surface-bright border border-outline-variant rounded text-xs text-on-surface outline-none"
-                        >
-                          <option value="SINGLE_ROUTE">Một tuyến</option>
-                          <option value="MULTI_ROUTE">Liên tuyến</option>
-                        </select>
-                      </div>
+                      {mode === "BUS" && (
+                        <div className={p.durationType === "MONTHLY" ? "w-[25%]" : "w-[40%]"}>
+                          <label className="block text-[9px] text-outline mb-0.5">Phạm vi</label>
+                          <select
+                            value={p.scope || "MULTI_ROUTE"}
+                            onChange={(e) => handleUpdatePassPrice(idx, "scope", e.target.value as any)}
+                            className="w-full px-2 py-1 bg-surface-bright border border-outline-variant rounded text-xs text-on-surface outline-none"
+                          >
+                            <option value="SINGLE_ROUTE">Một tuyến</option>
+                            <option value="MULTI_ROUTE">Liên tuyến</option>
+                          </select>
+                        </div>
+                      )}
 
-                      <div className="w-[25%]">
+                      <div className={mode === "BUS" ? "w-[25%]" : (p.durationType === "MONTHLY" ? "w-[30%]" : "w-[45%]")}>
                         <label className="block text-[9px] text-outline mb-0.5">Mệnh giá (₫)</label>
                         <input
                           type="number"

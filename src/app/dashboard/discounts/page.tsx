@@ -33,6 +33,7 @@ export default function DiscountsPage() {
   const [modalMode, setModalMode] = useState<"CREATE" | "EDIT">("CREATE");
   const [selectedDiscount, setSelectedDiscount] = useState<FareDiscount | null>(null);
   const [isOffline, setIsOffline] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   // Confirm Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -84,6 +85,7 @@ export default function DiscountsPage() {
     setDiscountValue(50);
     setEffectiveFrom("2026-01-01");
     setEffectiveTo("2026-12-31");
+    setModalError(null);
     setIsModalOpen(true);
   };
 
@@ -95,6 +97,7 @@ export default function DiscountsPage() {
     setDiscountValue(ds.discountValue);
     setEffectiveFrom(ds.effectiveFrom);
     setEffectiveTo(ds.effectiveTo);
+    setModalError(null);
     setIsModalOpen(true);
   };
 
@@ -152,19 +155,10 @@ export default function DiscountsPage() {
           effectiveTo: newDs.effectiveTo || effectiveTo,
           status: newDs.status || "ACTIVE"
         }]);
+        setIsModalOpen(false);
       } catch (err: any) {
-        console.warn("POST /api/fare-discounts failed, using mock local state. Error:", err.message);
-        setIsOffline(true);
-        const fallbackDs: FareDiscount = {
-          id: "ds-" + Date.now(),
-          passengerType,
-          discountType,
-          discountValue,
-          effectiveFrom,
-          effectiveTo,
-          status: "ACTIVE"
-        };
-        setDiscounts([...discounts, fallbackDs]);
+        console.warn("POST /api/fare-discounts failed. Error:", err.message);
+        setModalError(`Lỗi thêm đối tượng ưu đãi: ${err.message || "Không thể thực hiện."}`);
       }
     } else if (modalMode === "EDIT" && selectedDiscount) {
       try {
@@ -191,19 +185,12 @@ export default function DiscountsPage() {
               : ds
           )
         );
+        setIsModalOpen(false);
       } catch (err: any) {
-        console.warn("PUT /api/fare-discounts failed, using mock local state. Error:", err.message);
-        setIsOffline(true);
-        setDiscounts(
-          discounts.map((ds) =>
-            ds.id === selectedDiscount.id
-              ? { ...ds, passengerType, discountType, discountValue, effectiveFrom, effectiveTo }
-              : ds
-          )
-        );
+        console.warn("PUT /api/fare-discounts failed. Error:", err.message);
+        setModalError(`Lỗi cập nhật đối tượng ưu đãi: ${err.message || "Không thể thực hiện."}`);
       }
     }
-    setIsModalOpen(false);
   };
 
   const filteredDiscounts = discounts.filter((ds) => {
@@ -379,6 +366,20 @@ export default function DiscountsPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {modalError && (
+                <div className="px-4 py-2.5 bg-error-container text-on-error-container text-xs rounded-lg flex items-center justify-between border border-error/20">
+                  <span className="flex items-center gap-2 font-medium">
+                    <AlertTriangle className="h-4 w-4 text-error font-semibold" /> {modalError}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setModalError(null)}
+                    className="p-1 hover:bg-error-container/20 rounded cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5 text-on-error-container" />
+                  </button>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1">
                   Nhóm đối tượng khách hàng

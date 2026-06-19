@@ -42,8 +42,10 @@ export default function BlacklistPage() {
   });
 
   // Form State
-  const [cardUid, setCardUid] = useState("");
+  const [cardUidSelect, setCardUidSelect] = useState("");
+  const [customCardUid, setCustomCardUid] = useState("");
   const [reason, setReason] = useState("");
+  const [availableCards, setAvailableCards] = useState<{ id: string; cardUid: string; status: string }[]>([]);
 
   useEffect(() => {
     async function loadData() {
@@ -55,6 +57,11 @@ export default function BlacklistPage() {
         
         let cardMap: Record<string, string> = {};
         if (Array.isArray(cardsData)) {
+          setAvailableCards(cardsData.map((c: any) => ({
+            id: c.id,
+            cardUid: c.cardUid,
+            status: c.status || "ACTIVE"
+          })));
           cardsData.forEach((c) => {
             cardMap[c.id] = c.cardUid;
           });
@@ -78,7 +85,8 @@ export default function BlacklistPage() {
   }, []);
 
   const handleOpenModal = () => {
-    setCardUid("");
+    setCardUidSelect("");
+    setCustomCardUid("");
     setReason("");
     setModalError(null);
     setIsModalOpen(true);
@@ -87,17 +95,18 @@ export default function BlacklistPage() {
   const handleAddBlacklist = async (e: React.FormEvent) => {
     e.preventDefault();
     setModalError(null);
+
+    const finalCardUid = cardUidSelect === "custom" ? customCardUid.trim() : cardUidSelect;
+    if (!finalCardUid) {
+      setModalError("Vui lòng chọn hoặc nhập mã định danh thẻ (UID)!");
+      return;
+    }
     
-    let resolvedCardId = cardUid;
-    try {
-      const cardsList = await fetchApi("/api/cards");
-      if (Array.isArray(cardsList)) {
-        const matched = cardsList.find((c) => c.cardUid.toLowerCase() === cardUid.trim().toLowerCase());
-        if (matched) {
-          resolvedCardId = matched.id;
-        }
-      }
-    } catch (e) {}
+    let resolvedCardId = finalCardUid;
+    const matched = availableCards.find((c) => c.cardUid.toLowerCase() === finalCardUid.toLowerCase());
+    if (matched) {
+      resolvedCardId = matched.id;
+    }
 
     try {
       const res = await fetchApi("/api/blacklist", {
@@ -110,7 +119,7 @@ export default function BlacklistPage() {
       
       setBlacklist([{
         id: res.id,
-        cardUid: cardUid,
+        cardUid: finalCardUid,
         reason: reason.trim(),
         notes: reason.trim(),
         blockedAt: res.addedAt ? new Date(res.addedAt).toISOString().replace("T", " ").substring(0, 16) : new Date().toISOString().replace("T", " ").substring(0, 16)
@@ -118,8 +127,7 @@ export default function BlacklistPage() {
       setIsModalOpen(false);
     } catch (err: any) {
       console.warn("POST /api/blacklist failed. Error:", err.message);
-      setIsOffline(true);
-      setModalError("Lỗi kết nối tới Backend API. Không thể thêm thẻ vào danh sách đen.");
+      setModalError(`Lỗi kết nối tới Backend API: ${err.message || "Không thể thêm thẻ vào danh sách đen."}`);
     }
   };
 
@@ -318,14 +326,33 @@ export default function BlacklistPage() {
                 <label className="block text-xs font-semibold text-on-surface-variant mb-1">
                   Mã định danh thẻ (UID)
                 </label>
-                <input
-                  type="text"
+                <select
                   required
-                  placeholder="Ví dụ: 04:AA:BB:CC:DD:EE:FF"
-                  value={cardUid}
-                  onChange={(e) => setCardUid(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
-                />
+                  value={cardUidSelect}
+                  onChange={(e) => setCardUidSelect(e.target.value)}
+                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer font-medium mb-3"
+                >
+                  <option value="">-- Chọn thẻ từ danh sách --</option>
+                  {availableCards
+                    .filter(c => !blacklist.some(b => b.cardUid === c.cardUid))
+                    .map((c) => (
+                      <option key={c.id} value={c.cardUid}>
+                        {c.cardUid} ({c.status === "ACTIVE" ? "Hoạt động" : c.status === "SUSPENDED" ? "Tạm khóa" : c.status === "ISSUED" ? "Chưa kích hoạt" : c.status})
+                      </option>
+                    ))}
+                  <option value="custom">Khác (Nhập thủ công)</option>
+                </select>
+
+                {cardUidSelect === "custom" && (
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ví dụ: 04:AA:BB:CC:DD:EE:FF"
+                    value={customCardUid}
+                    onChange={(e) => setCustomCardUid(e.target.value)}
+                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
+                  />
+                )}
               </div>
 
               <div>

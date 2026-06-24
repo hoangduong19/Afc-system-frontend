@@ -3,17 +3,12 @@
 import React, { useState, useEffect } from "react";
 import {
   Receipt,
-  Filter,
   CheckCircle,
   AlertTriangle,
   Info,
-  Calendar,
   Clock,
-  ArrowRight,
-  TrendingUp,
   X,
-  CreditCard,
-  Building2
+  CreditCard
 } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 
@@ -25,17 +20,12 @@ interface TransactionItem {
   lineCode: string;
   tapInStationCode: string;
   tapInAt: string;
-  tapInDeviceId: string;
   tapOutStationCode?: string;
   tapOutAt?: string;
-  tapOutDeviceId?: string;
   distanceKm: number;
   fareAmount: number;
   mode: "METRO" | "BUS" | "ANY";
-  paymentMethod: "WALLET" | "TICKET" | "PREPAID";
   ticketType?: "SINGLE_TRIP" | "MONTHLY_PASS";
-  tripStatus: "COMPLETED" | "DEBT";
-  debtAmount: number;
 }
 
 export default function TransactionsPage() {
@@ -52,7 +42,19 @@ export default function TransactionsPage() {
         const data = await fetchApi("/api/transactions");
         const list = data.content || data || [];
         if (Array.isArray(list)) {
-          setTransactions(list.map((t: any) => ({
+          setTransactions(list.map((t: {
+            id: string;
+            cardUid?: string;
+            externalTransactionId?: string;
+            operatorCode?: string;
+            tapInStationCode?: string;
+            tapInAt?: string;
+            tapOutStationCode?: string;
+            tapOutAt?: string;
+            distanceKm?: number;
+            fareAmount?: number;
+            ticketType?: "SINGLE_TRIP" | "MONTHLY_PASS";
+          }) => ({
             transactionId: t.id,
             cardUid: t.cardUid || "Mã thẻ ẩn",
             ticketId: t.externalTransactionId,
@@ -60,21 +62,17 @@ export default function TransactionsPage() {
             lineCode: t.operatorCode === "HURC" ? "L2A (Cát Linh - Yên Nghĩa)" : "BUS LINE",
             tapInStationCode: t.tapInStationCode || "MS01",
             tapInAt: t.tapInAt ? new Date(t.tapInAt).toISOString().replace("T", " ").substring(0, 19) : "",
-            tapInDeviceId: t.tapInDeviceId || "GATE-IN-01",
             tapOutStationCode: t.tapOutStationCode || undefined,
             tapOutAt: t.tapOutAt ? new Date(t.tapOutAt).toISOString().replace("T", " ").substring(0, 19) : undefined,
-            tapOutDeviceId: t.tapOutDeviceId || undefined,
             distanceKm: t.distanceKm || 0,
             fareAmount: t.fareAmount || 0,
             mode: t.operatorCode === "HURC" ? "METRO" : "BUS",
-            paymentMethod: t.paymentMethod || "WALLET",
-            ticketType: t.ticketType || undefined,
-            tripStatus: t.status || "COMPLETED",
-            debtAmount: t.debtAmount || 0
+            ticketType: t.ticketType || undefined
           })));
         }
-      } catch (err: any) {
-        console.warn("FMC Transactions API is offline. Running in mock fallback mode. Error:", err.message);
+      } catch (err: unknown) {
+        const error = err as Error;
+        console.warn("FMC Transactions API is offline. Running in mock fallback mode. Error:", error.message);
         setIsOffline(true);
       }
     }
@@ -83,7 +81,10 @@ export default function TransactionsPage() {
 
   const filteredTransactions = transactions.filter((tx) => {
     const matchesOperator = operatorFilter === "ALL" || tx.operatorCode === operatorFilter;
-    const matchesStatus = statusFilter === "ALL" || tx.tripStatus === statusFilter;
+    const matchesStatus =
+      statusFilter === "ALL" ||
+      (statusFilter === "COMPLETED" && !!tx.tapOutStationCode) ||
+      (statusFilter === "INCOMPLETE" && !tx.tapOutStationCode);
     return matchesOperator && matchesStatus;
   });
 
@@ -109,7 +110,7 @@ export default function TransactionsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-grid-gutter">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-grid-gutter">
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Tổng lượt quẹt thẻ (Hôm nay)
@@ -128,18 +129,10 @@ export default function TransactionsPage() {
         </div>
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
-            Nợ cước phát sinh
-          </h3>
-          <div className="text-3xl font-bold text-error font-data-mono">
-            ₫ {transactions.reduce((acc, t) => acc + t.debtAmount, 0).toLocaleString()}
-          </div>
-        </div>
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
-          <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
             Cự ly di chuyển TB
           </h3>
           <div className="text-3xl font-bold text-on-surface font-data-mono">
-            {(transactions.reduce((acc, t) => acc + t.distanceKm, 0) / transactions.length).toFixed(1)} km
+            {transactions.length > 0 ? (transactions.reduce((acc, t) => acc + t.distanceKm, 0) / transactions.length).toFixed(1) : "0.0"} km
           </div>
         </div>
       </div>
@@ -164,7 +157,7 @@ export default function TransactionsPage() {
           >
             <option value="ALL">Tất cả trạng thái</option>
             <option value="COMPLETED">Thành công</option>
-            <option value="DEBT">Nợ cước</option>
+            <option value="INCOMPLETE">Chưa quẹt ra</option>
           </select>
         </div>
       </div>
@@ -246,18 +239,18 @@ export default function TransactionsPage() {
                     <td className="p-table-cell-padding">
                       <span
                         className={`px-2.5 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${
-                          tx.tripStatus === "COMPLETED"
+                          tx.tapOutStationCode
                             ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
                             : "bg-error-container text-on-error-container"
                         }`}
                       >
-                        {tx.tripStatus === "COMPLETED" ? (
+                        {tx.tapOutStationCode ? (
                           <>
                             <CheckCircle className="h-3 w-3" /> THÀNH CÔNG
                           </>
                         ) : (
                           <>
-                            <AlertTriangle className="h-3 w-3" /> NỢ CƯỚC (+₫{tx.debtAmount.toLocaleString()})
+                            <AlertTriangle className="h-3 w-3" /> CHƯA QUẸT RA
                           </>
                         )}
                       </span>
@@ -325,7 +318,6 @@ export default function TransactionsPage() {
                   </div>
                   <div>Ga: <strong className="text-on-surface">{selectedTx.tapInStationCode}</strong></div>
                   <div>Giờ: <span className="font-data-mono text-on-surface-variant">{selectedTx.tapInAt}</span></div>
-                  <div>Đầu đọc: <span className="font-data-mono text-on-surface-variant">{selectedTx.tapInDeviceId}</span></div>
                 </div>
 
                 {/* Gate Out */}
@@ -337,7 +329,6 @@ export default function TransactionsPage() {
                     <>
                       <div>Ga: <strong className="text-on-surface">{selectedTx.tapOutStationCode}</strong></div>
                       <div>Giờ: <span className="font-data-mono text-on-surface-variant">{selectedTx.tapOutAt}</span></div>
-                      <div>Đầu đọc: <span className="font-data-mono text-on-surface-variant">{selectedTx.tapOutDeviceId || "—"}</span></div>
                     </>
                   ) : (
                     <div className="text-error font-medium italic flex items-center gap-1 pt-2">
@@ -349,21 +340,15 @@ export default function TransactionsPage() {
             </div>
 
             <div className="bg-surface-container-low p-4 rounded-xl border border-outline-variant space-y-3">
-              <h4 className="font-bold text-xs text-on-surface">Chi tiết cước phí & Thanh toán</h4>
-              <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <h4 className="font-bold text-xs text-on-surface">Chi tiết cước phí</h4>
+              <div className="grid grid-cols-2 gap-2 text-center text-xs">
                 <div className="bg-surface-bright p-2.5 rounded border border-outline-variant">
-                  <div className="text-[9px] text-outline uppercase">Phương thức</div>
-                  <div className="font-semibold text-on-surface mt-1">{selectedTx.paymentMethod}</div>
+                  <div className="text-[9px] text-outline uppercase">Cự ly di chuyển</div>
+                  <div className="font-semibold text-on-surface mt-1">{selectedTx.distanceKm} km</div>
                 </div>
                 <div className="bg-surface-bright p-2.5 rounded border border-outline-variant">
                   <div className="text-[9px] text-outline uppercase">Cước phí quẹt</div>
                   <div className="font-bold font-data-mono text-secondary-fixed-dim mt-1">₫ {selectedTx.fareAmount.toLocaleString()}</div>
-                </div>
-                <div className="bg-surface-bright p-2.5 rounded border border-outline-variant">
-                  <div className="text-[9px] text-outline uppercase">Nợ cước phát sinh</div>
-                  <div className={`font-bold font-data-mono mt-1 ${selectedTx.debtAmount > 0 ? "text-error" : "text-outline"}`}>
-                    ₫ {selectedTx.debtAmount.toLocaleString()}
-                  </div>
                 </div>
               </div>
             </div>

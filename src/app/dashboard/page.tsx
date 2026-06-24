@@ -97,11 +97,11 @@ export default function OverviewPage() {
           </div>
         </div>
 
-        {/* Tickets Sold Card */}
+        {/* Trips Today Card */}
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm hover:bg-surface-container-low transition-colors">
           <div className="flex justify-between items-start mb-2">
             <h3 className="font-label-caps text-label-caps text-on-surface-variant uppercase">
-              Vé đã bán hôm nay
+              Lượt di chuyển hôm nay
             </h3>
             <Ticket className="h-5 w-5 text-on-surface-variant" />
           </div>
@@ -109,7 +109,7 @@ export default function OverviewPage() {
             {counts.transactions.toLocaleString()}
           </div>
           <p className="font-body-sm text-body-sm text-on-surface-variant">
-            Tổng giao dịch ghi nhận
+            Tổng lượt đi ghi nhận từ Cấp 4
           </p>
         </div>
 

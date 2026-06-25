@@ -274,7 +274,6 @@ export default function DiscountsPage() {
           >
             <option value="ALL">Tất cả nhóm hành khách</option>
             <option value="STUDENT">Học sinh / Sinh viên</option>
-            <option value="SENIOR">Người cao tuổi</option>
             <option value="PRIORITY">Đối tượng ưu tiên</option>
           </select>
         </div>
@@ -435,7 +434,6 @@ export default function DiscountsPage() {
                   disabled={modalMode === "EDIT"}
                 >
                   <option value="STUDENT">Học sinh / Sinh viên</option>
-                  <option value="SENIOR">Người cao tuổi</option>
                   <option value="PRIORITY">Đối tượng ưu tiên miễn giảm</option>
                 </select>
               </div>

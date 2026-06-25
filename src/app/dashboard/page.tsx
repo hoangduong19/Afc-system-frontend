@@ -12,7 +12,7 @@ import { fetchApi } from "@/lib/api";
 
 export default function OverviewPage() {
   const [isOffline, setIsOffline] = useState(false);
-  
+
   // Real data state
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [recentAnomalies, setRecentAnomalies] = useState<any[]>([]);
@@ -32,7 +32,7 @@ export default function OverviewPage() {
       try {
         const txData = await fetchApi("/api/transactions", { params: { size: 5 } });
         const anomalyData = await fetchApi("/api/anomalies", { params: { size: 5, isResolved: false } });
-        
+
         if (txData && txData.content) {
           setRecentTransactions(txData.content);
           setCounts(prev => ({
@@ -41,7 +41,7 @@ export default function OverviewPage() {
             transactions: txData.totalElements || txData.content.length
           }));
         }
-        
+
         if (anomalyData && anomalyData.content) {
           setRecentAnomalies(anomalyData.content);
           setCounts(prev => ({
@@ -76,11 +76,11 @@ export default function OverviewPage() {
             <Coins className="h-16 w-16" />
           </div>
           <h3 className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-            Tổng doanh thu hôm nay
+            Tổng doanh thu
           </h3>
           <div className="flex items-baseline gap-2 mb-4">
             <span className="font-display text-display text-on-surface">
-              ₫ {counts.revenue.toLocaleString()}
+              ₫ {Math.round(counts.revenue).toLocaleString()}
             </span>
             {counts.revenue > 0 && (
               <span className="text-tertiary-fixed-dim font-body-sm text-body-sm flex items-center gap-0.5">
@@ -97,11 +97,11 @@ export default function OverviewPage() {
           </div>
         </div>
 
-        {/* Trips Today Card */}
+        {/* Trips Card */}
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm hover:bg-surface-container-low transition-colors">
           <div className="flex justify-between items-start mb-2">
             <h3 className="font-label-caps text-label-caps text-on-surface-variant uppercase">
-              Lượt di chuyển hôm nay
+              Lượt di chuyển
             </h3>
             <Ticket className="h-5 w-5 text-on-surface-variant" />
           </div>
@@ -177,16 +177,15 @@ export default function OverviewPage() {
                   >
                     <td className="p-table-cell-padding text-on-surface">{(row.id || "").slice(0, 8).toUpperCase()}</td>
                     <td className="p-table-cell-padding text-on-surface-variant">{row.cardUid}</td>
-                    <td className="p-table-cell-padding text-right text-on-surface font-semibold">₫ {(row.fareAmount || 0).toLocaleString()}</td>
+                    <td className="p-table-cell-padding text-right text-on-surface font-semibold">₫ {Math.round(row.fareAmount || 0).toLocaleString()}</td>
                     <td className="p-table-cell-padding">
                       <span
-                        className={`px-2 py-0.5 rounded font-body-sm text-[11px] font-medium ${
-                          row.status === "COMPLETED"
-                            ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
-                            : row.status === "DEBT"
+                        className={`px-2 py-0.5 rounded font-body-sm text-[11px] font-medium ${row.status === "COMPLETED"
+                          ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
+                          : row.status === "DEBT"
                             ? "bg-surface-variant text-on-surface-variant"
                             : "bg-error-container text-on-error-container"
-                        }`}
+                          }`}
                       >
                         {row.status === "COMPLETED" ? "Thành công" : row.status === "DEBT" ? "Ghi nợ" : row.status || "Chờ xử lý"}
                       </span>
@@ -237,13 +236,12 @@ export default function OverviewPage() {
                       <td className="p-table-cell-padding text-on-surface font-semibold">{row.anomalyType}</td>
                       <td className="p-table-cell-padding">
                         <span
-                          className={`px-2 py-0.5 rounded font-label-caps text-[10px] font-bold ${
-                            row.severity === "CRITICAL"
-                              ? "bg-error text-on-error"
-                              : row.severity === "HIGH"
+                          className={`px-2 py-0.5 rounded font-label-caps text-[10px] font-bold ${row.severity === "CRITICAL"
+                            ? "bg-error text-on-error"
+                            : row.severity === "HIGH"
                               ? "bg-error-container text-on-error-container"
                               : "bg-surface-variant text-on-surface-variant"
-                          }`}
+                            }`}
                         >
                           {row.severity}
                         </span>

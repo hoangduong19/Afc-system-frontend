@@ -34,7 +34,7 @@ export default function AnomaliesPage() {
   const [severityFilter, setSeverityFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [isOffline, setIsOffline] = useState(false);
-  
+
   // Resolve Action Modal State
   const [selectedAnomaly, setSelectedAnomaly] = useState<AnomalyItem | null>(null);
   const [resolutionNote, setResolutionNote] = useState("");
@@ -86,12 +86,12 @@ export default function AnomaliesPage() {
     const updater = (alt: AnomalyItem) =>
       alt.id === selectedAnomaly.id
         ? {
-            ...alt,
-            isResolved: true,
-            notes: resolutionNote,
-            resolvedAt: resolvedTime.replace("T", " ").substring(0, 19),
-            resolvedBy: "Người vận hành"
-          }
+          ...alt,
+          isResolved: true,
+          notes: resolutionNote,
+          resolvedAt: resolvedTime.replace("T", " ").substring(0, 19),
+          resolvedBy: "Người vận hành"
+        }
         : alt;
 
     setModalError(null);
@@ -110,7 +110,7 @@ export default function AnomaliesPage() {
     } catch (err: any) {
       console.error("PATCH resolve anomaly failed. Error:", err);
       const isNetworkError = !err.message || err.message.toLowerCase().includes("failed to fetch") || err.message.toLowerCase().includes("networkerror") || err.message.toLowerCase().includes("api request failed with status");
-      
+
       if (!isNetworkError) {
         setModalError(`Lỗi khắc phục sự cố: ${err.message || "Không thể thực hiện."}`);
       } else {
@@ -263,13 +263,12 @@ export default function AnomaliesPage() {
                       )}
                     </td>
                     <td className="p-table-cell-padding">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        alt.severity === "CRITICAL"
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${alt.severity === "CRITICAL"
                           ? "bg-error-container text-on-error-container"
                           : alt.severity === "WARNING"
-                          ? "bg-orange-950/20 text-orange-400"
-                          : "bg-surface-container-high text-on-surface-variant"
-                      }`}>
+                            ? "bg-orange-950/20 text-orange-400"
+                            : "bg-surface-container-high text-on-surface-variant"
+                        }`}>
                         {alt.severity}
                       </span>
                     </td>
@@ -281,11 +280,10 @@ export default function AnomaliesPage() {
                     </td>
                     <td className="p-table-cell-padding">
                       <span
-                        className={`px-2.5 py-0.5 rounded font-body-sm text-[10px] font-semibold inline-flex items-center gap-1 ${
-                          !alt.isResolved
+                        className={`px-2.5 py-0.5 rounded font-body-sm text-[10px] font-semibold inline-flex items-center gap-1 ${!alt.isResolved
                             ? "bg-error-container text-on-error-container animate-pulse"
                             : "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
-                        }`}
+                          }`}
                       >
                         {!alt.isResolved ? "ĐANG MỞ" : "ĐÃ XỬ LÝ"}
                       </span>

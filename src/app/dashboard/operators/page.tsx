@@ -306,8 +306,8 @@ export default function OperatorsPage() {
                     <td className="p-table-cell-padding">
                       <span
                         className={`px-2.5 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${op.status === "ACTIVE"
-                            ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
-                            : "bg-error-container text-on-error-container"
+                          ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
+                          : "bg-error-container text-on-error-container"
                           }`}
                       >
                         {op.status === "ACTIVE" ? (
@@ -333,8 +333,8 @@ export default function OperatorsPage() {
                         <button
                           onClick={() => handleToggleStatus(op.id)}
                           className={`p-1 hover:bg-surface-container-high rounded transition-colors cursor-pointer ${op.status === "ACTIVE"
-                              ? "text-error hover:bg-error-container/20"
-                              : "text-tertiary-fixed-dim hover:bg-tertiary-fixed-dim/20"
+                            ? "text-error hover:bg-error-container/20"
+                            : "text-tertiary-fixed-dim hover:bg-tertiary-fixed-dim/20"
                             }`}
                           title={op.status === "ACTIVE" ? "Khóa" : "Kích hoạt"}
                         >

@@ -54,7 +54,7 @@ export default function BlacklistPage() {
           fetchApi("/api/blacklist"),
           fetchApi("/api/cards")
         ]);
-        
+
         let cardMap: Record<string, string> = {};
         if (Array.isArray(cardsData)) {
           setAvailableCards(cardsData.map((c: any) => ({
@@ -66,7 +66,7 @@ export default function BlacklistPage() {
             cardMap[c.id] = c.cardUid;
           });
         }
-        
+
         if (Array.isArray(blacklistData)) {
           setBlacklist(blacklistData.map((b) => ({
             id: b.id,
@@ -101,7 +101,7 @@ export default function BlacklistPage() {
       setModalError("Vui lòng chọn hoặc nhập mã định danh thẻ (UID)!");
       return;
     }
-    
+
     let resolvedCardId = finalCardUid;
     const matched = availableCards.find((c) => c.cardUid.toLowerCase() === finalCardUid.toLowerCase());
     if (matched) {
@@ -116,7 +116,7 @@ export default function BlacklistPage() {
           reason: reason.trim()
         })
       });
-      
+
       setBlacklist([{
         id: res.id,
         cardUid: finalCardUid,
@@ -169,7 +169,7 @@ export default function BlacklistPage() {
             <AlertTriangle className="h-4 w-4 text-error" /> Lỗi kết nối tới Backend API. Dữ liệu đang hiển thị theo cache cục bộ.
           </span>
         </div>
-      )}    
+      )}
 
       {pageError && (
         <div className="px-4 py-3 bg-error-container text-on-error-container text-xs rounded-xl flex items-center justify-between border border-error/20">

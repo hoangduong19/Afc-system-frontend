@@ -121,7 +121,8 @@ export default function FareRulesPage() {
             effectiveFrom: r.effectiveFrom || "",
             effectiveTo: r.effectiveTo || "",
             status: r.status || "ACTIVE",
-            passPrices: r.passPrices || []
+            passPrices: r.passPrices || [],
+            version: r.version
           })));
         }
       } catch (err: any) {
@@ -323,7 +324,8 @@ export default function FareRulesPage() {
           effectiveFrom: newRule.effectiveFrom || effectiveFrom,
           effectiveTo: newRule.effectiveTo || effectiveTo,
           status: newRule.status || "ACTIVE",
-          passPrices: newRule.passPrices || current
+          passPrices: newRule.passPrices || current,
+          version: newRule.version
         }]);
         setIsModalOpen(false);
       } catch (err: any) {
@@ -357,7 +359,8 @@ export default function FareRulesPage() {
                   maxPrice: updatedRule.maxPrice !== undefined ? updatedRule.maxPrice : maxPrice,
                   effectiveFrom: updatedRule.effectiveFrom || effectiveFrom,
                   effectiveTo: updatedRule.effectiveTo || effectiveTo,
-                  passPrices: updatedRule.passPrices || current
+                  passPrices: updatedRule.passPrices || current,
+                  version: updatedRule.version || r.version
                 }
               : r
           )

@@ -38,7 +38,7 @@ export default function RoutesPage() {
           fetchApi("/api/routes"),
           fetchApi("/api/operators")
         ]);
-        
+
         let opMap: Record<string, string> = {};
         if (Array.isArray(opsData)) {
           setOperatorsList(opsData.map((o: any) => ({
@@ -52,7 +52,7 @@ export default function RoutesPage() {
         } else {
           opMap = { "op-1": "HURC", "op-2": "TRANSERCO" };
         }
-        
+
         if (Array.isArray(routesData)) {
           setRoutes(routesData.map((r: any) => ({
             id: r.id,
@@ -194,11 +194,10 @@ export default function RoutesPage() {
                     </td>
                     <td className="p-table-cell-padding" colSpan={2}>
                       <span
-                        className={`px-2 py-0.5 rounded font-label-caps text-[10px] font-bold ${
-                          route.type === "METRO"
+                        className={`px-2 py-0.5 rounded font-label-caps text-[10px] font-bold ${route.type === "METRO"
                             ? "bg-secondary-container text-on-secondary-container"
                             : "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
-                        }`}
+                          }`}
                       >
                         {route.type}
                       </span>

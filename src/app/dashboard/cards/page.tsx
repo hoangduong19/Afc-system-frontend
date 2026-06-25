@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   Eye,
   Slash,
-  Link as LinkIcon,
   X
 } from "lucide-react";
 import { fetchApi } from "@/lib/api";
@@ -18,11 +17,10 @@ interface TransportCard {
   id: string;
   uid: string;
   passengerType: string; // "ANON" | "IDENTIFIED" from backend type
-  status: "ACTIVE" | "SUSPENDED" | "ISSUED" | "REVOKED";
+  status: "CREATED" | "ACTIVE" | "SUSPENDED" | "ISSUED" | "REVOKED";
   supportsMetro: boolean;
   supportsBus: boolean;
   linkedUserId: string | null;
-  linkedTicket: string | null;
   createdAt: string;
 }
 
@@ -32,7 +30,6 @@ export default function CardsPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [isLinkUserModalOpen, setIsLinkUserModalOpen] = useState(false);
   const [linkUserId, setLinkUserId] = useState("");
   const [linkUserError, setLinkUserError] = useState<string | null>(null);
@@ -47,7 +44,7 @@ export default function CardsPage() {
     isOpen: boolean;
     cardId: string;
     cardUid: string;
-    action: "ACTIVATE" | "SUSPEND" | "REVOKE" | "UNLINK_TICKET" | "UNLINK_USER";
+    action: "ACTIVATE" | "SUSPEND" | "REVOKE" | "UNLINK_USER";
     title: string;
     description: string;
     requireReason: boolean;
@@ -77,31 +74,12 @@ export default function CardsPage() {
   const [ticketDurationMonths, setTicketDurationMonths] = useState<number>(1);
   const [ticketValidFrom, setTicketValidFrom] = useState<string>("");
 
-  // Ticket link list
-  const [availableTickets, setAvailableTickets] = useState<{ id: string; label: string }[]>([]);
-  const [selectedTicketId, setSelectedTicketId] = useState("");
-  const [customTicketId, setCustomTicketId] = useState("");
-
   const loadData = async () => {
     try {
-      const [cardsData, ticketsData] = await Promise.all([
-        fetchApi("/api/cards"),
-        fetchApi("/api/admin/tickets").catch(() => [])
-      ]);
-
-      const tList = ticketsData.content || ticketsData || [];
-      const cardToTicketMap: Record<string, any> = {};
-      if (Array.isArray(tList)) {
-        tList.forEach((t: any) => {
-          if (t.cardId && t.status === "ACTIVE") {
-            cardToTicketMap[t.cardId] = t;
-          }
-        });
-      }
+      const cardsData = await fetchApi("/api/cards");
 
       if (Array.isArray(cardsData)) {
         setCards(cardsData.map((c: any) => {
-          const linkedT = cardToTicketMap[c.id];
           return {
             id: c.id,
             uid: c.cardUid,
@@ -110,23 +88,9 @@ export default function CardsPage() {
             supportsMetro: !!c.supportsMetro,
             supportsBus: !!c.supportsBus,
             linkedUserId: c.linkedUserId || null,
-            linkedTicket: linkedT
-              ? `Vé ${linkedT.type === "SINGLE_TRIP" ? "lượt" : "tháng"} - ${
-                  linkedT.mode === "BUS" ? "Xe buýt" : linkedT.mode === "METRO" ? "Đường sắt" : linkedT.mode
-                } - ₫${(linkedT.price || 0).toLocaleString()}`
-              : null,
             createdAt: c.createdAt ? new Date(c.createdAt).toISOString().replace("T", " ").substring(0, 16) : ""
           };
         }));
-      }
-
-      if (Array.isArray(tList)) {
-        setAvailableTickets(tList.map((t: any) => ({
-          id: t.ticketId || t.id,
-          label: `Vé ${t.type === "SINGLE_TRIP" ? "lượt" : "tháng"} - ${
-            t.mode === "BUS" ? "Xe buýt" : t.mode === "METRO" ? "Đường sắt" : t.mode
-          } - ₫${(t.price || 0).toLocaleString()}`
-        })));
       }
     } catch (err: any) {
       console.warn("FMC Cards API is offline.", err.message);
@@ -241,7 +205,7 @@ export default function CardsPage() {
     }
   };
 
-  const triggerConfirm = (cardId: string, cardUid: string, action: "ACTIVATE" | "SUSPEND" | "REVOKE" | "UNLINK_TICKET" | "UNLINK_USER") => {
+  const triggerConfirm = (cardId: string, cardUid: string, action: "ACTIVATE" | "SUSPEND" | "REVOKE" | "UNLINK_USER") => {
     const card = cards.find(c => c.id === cardId);
     if (!card) return;
 
@@ -267,10 +231,6 @@ export default function CardsPage() {
         description = `Bạn có chắc chắn muốn kích hoạt thẻ ${cardUid} không?`;
         requireReason = false;
       }
-    } else if (action === "UNLINK_TICKET") {
-      title = "Xác nhận Hủy Liên Kết Vé";
-      description = `Bạn có chắc chắn muốn hủy liên kết vé khỏi thẻ ${cardUid} không?`;
-      requireReason = false;
     } else if (action === "UNLINK_USER") {
       title = "Xác nhận Hủy Liên Kết Người Dùng";
       description = `Bạn có chắc chắn muốn hủy liên kết người dùng khỏi thẻ ${cardUid} không?`;
@@ -300,21 +260,6 @@ export default function CardsPage() {
 
     setConfirmError(null);
     setConfirmModal(prev => ({ ...prev, isOpen: false }));
-
-    if (action === "UNLINK_TICKET") {
-      const originalList = [...cards];
-      setCards(cards.map((c) => c.id === cardId ? { ...c, linkedTicket: null } : c));
-      setPageError(null);
-      try {
-        await fetchApi("/api/cards/" + cardId + "/unlink-ticket", { method: "DELETE" });
-        await loadData();
-      } catch (err: any) {
-        console.warn("Unlink ticket failed:", err.message);
-        setCards(originalList);
-        setPageError(`Thao tác thất bại: ${err.message || "Không thể hủy liên kết vé khỏi thẻ " + cardUid}`);
-      }
-      return;
-    }
 
     if (action === "UNLINK_USER") {
       const originalList = [...cards];
@@ -372,44 +317,7 @@ export default function CardsPage() {
     }
   };
 
-  const handleOpenLinkModal = (card: TransportCard) => {
-    setSelectedCard(card);
-    setSelectedTicketId(availableTickets[0]?.id || "");
-    setCustomTicketId("");
-    setIsLinkModalOpen(true);
-  };
 
-  const handleLinkTicketSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (selectedCard) {
-      const targetTicketId = customTicketId.trim() || selectedTicketId;
-      if (!targetTicketId) {
-        alert("Vui lòng chọn hoặc nhập mã vé!");
-        return;
-      }
-
-      const originalList = [...cards];
-      setCards(
-        cards.map((c) =>
-          c.id === selectedCard.id ? { ...c, linkedTicket: `Vé: ${targetTicketId.substring(0, 8)}`, status: "ACTIVE" } : c
-        )
-      );
-      setPageError(null);
-
-      try {
-        await fetchApi("/api/cards/" + selectedCard.id + "/link-ticket", {
-          method: "POST",
-          body: JSON.stringify({ ticketId: targetTicketId })
-        });
-        await loadData();
-      } catch (err: any) {
-        console.warn("Link ticket API failed. Error:", err.message);
-        setCards(originalList);
-        setPageError("Lỗi kết nối tới Backend API. Không thể liên kết vé vào thẻ " + selectedCard.uid + ". Chi tiết: " + err.message);
-      }
-    }
-    setIsLinkModalOpen(false);
-  };
 
   const handleOpenLinkUserModal = (card: TransportCard) => {
     setSelectedCard(card);
@@ -457,9 +365,10 @@ export default function CardsPage() {
 
   const cardStatusPriority: Record<string, number> = {
     ACTIVE: 1,
-    ISSUED: 2,
-    SUSPENDED: 3,
-    REVOKED: 4
+    CREATED: 2,
+    ISSUED: 3,
+    SUSPENDED: 4,
+    REVOKED: 5
   };
 
   const sortedCards = [...filteredCards].sort((a, b) => {
@@ -557,6 +466,7 @@ export default function CardsPage() {
           >
             <option value="ALL">Tất cả trạng thái</option>
             <option value="ACTIVE">Hoạt động</option>
+            <option value="CREATED">Mới tạo</option>
             <option value="ISSUED">Chưa kích hoạt</option>
             <option value="SUSPENDED">Tạm khóa</option>
             <option value="REVOKED">Đã hủy</option>
@@ -589,9 +499,6 @@ export default function CardsPage() {
                   Mã người dùng liên kết
                 </th>
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
-                  Vé liên kết
-                </th>
-                <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
                   Trạng thái
                 </th>
                 <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
@@ -618,28 +525,6 @@ export default function CardsPage() {
                     <td className="p-table-cell-padding font-data-mono text-on-surface-variant text-[11px] truncate max-w-[120px]" title={card.linkedUserId || ""}>
                       {card.linkedUserId || <span className="text-outline italic">Chưa liên kết</span>}
                     </td>
-                    <td className="p-table-cell-padding text-on-surface">
-                      {card.linkedTicket ? (
-                        <div className="inline-flex items-center gap-2 bg-secondary-container/30 px-2.5 py-1 rounded-full text-xs text-on-secondary-container">
-                          <CheckCircle className="h-3.5 w-3.5 text-secondary" />
-                          <span className="font-semibold">{card.linkedTicket}</span>
-                          <button
-                            onClick={() => triggerConfirm(card.id, card.uid, "UNLINK_TICKET")}
-                            className="text-error hover:text-error-hover transition-colors font-bold ml-1 text-xs cursor-pointer border-l border-outline-variant pl-2"
-                            title="Hủy liên kết vé"
-                          >
-                            Gỡ
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleOpenLinkModal(card)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 border border-outline rounded-full text-xs text-on-surface-variant hover:bg-surface-container hover:text-primary transition-all cursor-pointer font-medium"
-                        >
-                          <LinkIcon className="h-3 w-3" /> Liên kết vé
-                        </button>
-                      )}
-                    </td>
                     <td className="p-table-cell-padding">
                       <span
                         className={`px-2.5 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${
@@ -647,6 +532,8 @@ export default function CardsPage() {
                             ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
                             : card.status === "SUSPENDED"
                             ? "bg-secondary-fixed-dim/20 text-on-secondary-fixed-variant"
+                            : card.status === "CREATED"
+                            ? "bg-outline-variant/30 text-on-surface-variant"
                             : card.status === "ISSUED"
                             ? "bg-surface-variant text-on-surface-variant"
                             : "bg-error-container text-on-error-container"
@@ -659,6 +546,10 @@ export default function CardsPage() {
                         ) : card.status === "SUSPENDED" ? (
                           <>
                             <AlertTriangle className="h-3 w-3" /> Tạm khóa
+                          </>
+                        ) : card.status === "CREATED" ? (
+                          <>
+                            <Eye className="h-3 w-3" /> Mới tạo
                           </>
                         ) : card.status === "ISSUED" ? (
                           <>
@@ -673,7 +564,7 @@ export default function CardsPage() {
                     </td>
                     <td className="p-table-cell-padding text-right">
                       <div className="inline-flex gap-2">
-                        {card.status === "ISSUED" && (
+                        {(card.status === "ISSUED" || card.status === "CREATED") && (
                           <button
                             onClick={() => triggerConfirm(card.id, card.uid, "ACTIVATE")}
                             className="px-2 py-0.5 bg-tertiary-fixed-dim/20 hover:bg-tertiary-fixed-dim/30 text-on-tertiary-fixed-variant rounded text-[10px] font-semibold uppercase cursor-pointer"
@@ -711,7 +602,7 @@ export default function CardsPage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-on-surface-variant font-medium">
+                  <td colSpan={5} className="p-8 text-center text-on-surface-variant font-medium">
                     Không tìm thấy thẻ nào khớp điều kiện tìm kiếm.
                   </td>
                 </tr>
@@ -865,7 +756,6 @@ export default function CardsPage() {
                       >
                         <option value="">Không có (Mặc định)</option>
                         <option value="STUDENT">Sinh viên (STUDENT)</option>
-                        <option value="SENIOR">Người cao tuổi (SENIOR)</option>
                         <option value="PRIORITY">Đối tượng ưu tiên (PRIORITY)</option>
                       </select>
                     </div>
@@ -952,95 +842,6 @@ export default function CardsPage() {
         </div>
       )}
 
-      {/* Modal - Liên kết vé */}
-      {isLinkModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setIsLinkModalOpen(false)}
-          />
-          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl shadow-2xl w-full max-w-md p-6 z-10">
-            <div className="flex justify-between items-center pb-3 border-b border-outline-variant mb-4">
-              <h3 className="text-lg font-bold text-on-surface">Liên Kết Vé Vào Thẻ</h3>
-              <button
-                onClick={() => setIsLinkModalOpen(false)}
-                className="p-1 hover:bg-surface-container-high rounded-full text-on-surface-variant cursor-pointer"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleLinkTicketSubmit} className="space-y-4">
-              <div className="bg-surface-container-low p-3 rounded border border-outline-variant">
-                <div className="text-xs text-on-surface-variant mb-1 font-semibold">Thẻ chọn liên kết:</div>
-                <div className="text-sm font-bold font-data-mono text-on-surface">{selectedCard?.uid}</div>
-                <div className="text-xs text-on-surface-variant">Loại thẻ: {selectedCard?.passengerType}</div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Chọn Vé có sẵn trên hệ thống
-                </label>
-                {availableTickets.length > 0 ? (
-                  <select
-                    value={selectedTicketId}
-                    onChange={(e) => {
-                      setSelectedTicketId(e.target.value);
-                      setCustomTicketId("");
-                    }}
-                    className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm cursor-pointer"
-                  >
-                    {availableTickets.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.label}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="text-xs text-error italic p-2 bg-error-container/10 border border-error/20 rounded">
-                    Không tìm thấy vé nào đang lưu trữ. Hãy sử dụng tùy chọn nhập tay bên dưới.
-                  </div>
-                )}
-              </div>
-
-              <div className="relative flex py-1 items-center">
-                <div className="flex-grow border-t border-outline-variant"></div>
-                <span className="flex-shrink mx-4 text-outline text-xs">HOẶC</span>
-                <div className="flex-grow border-t border-outline-variant"></div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-on-surface-variant mb-1">
-                  Nhập mã vé thủ công
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: 11111111-1111-1111-1111-111111111111"
-                  value={customTicketId}
-                  onChange={(e) => setCustomTicketId(e.target.value)}
-                  className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"
-                />
-              </div>
-
-              <div className="flex gap-3 justify-end pt-4">
-                <button
-                  type="button"
-                  onClick={() => setIsLinkModalOpen(false)}
-                  className="px-4 py-2 border border-outline-variant rounded text-on-surface-variant hover:bg-surface-container-high transition-colors text-xs font-semibold uppercase cursor-pointer"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-secondary text-on-secondary rounded hover:bg-secondary-container transition-colors text-xs font-semibold uppercase cursor-pointer"
-                >
-                  Xác nhận liên kết
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* Modal - Hộp thoại Xác nhận và Nhập lý do tùy chỉnh */}
       {confirmModal.isOpen && (

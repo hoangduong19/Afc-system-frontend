@@ -96,7 +96,7 @@ export default function TransactionsPage() {
             <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
           </span>
         </div>
-      )}    
+      )}
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -113,7 +113,7 @@ export default function TransactionsPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-grid-gutter">
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
-            Tổng lượt quẹt thẻ (Hôm nay)
+            Tổng chuyến đi
           </h3>
           <div className="text-3xl font-bold text-on-surface font-data-mono">
             {transactions.length}
@@ -121,7 +121,7 @@ export default function TransactionsPage() {
         </div>
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
           <h3 className="font-label-caps text-xs text-on-surface-variant uppercase mb-1">
-            Doanh thu Quẹt thẻ
+            Doanh thu vé lượt
           </h3>
           <div className="text-3xl font-bold text-secondary-fixed-dim font-data-mono">
             ₫ {transactions.reduce((acc, t) => acc + t.fareAmount, 0).toLocaleString()}
@@ -208,9 +208,8 @@ export default function TransactionsPage() {
                       {tx.cardUid}
                     </td>
                     <td className="p-table-cell-padding">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        tx.operatorCode === "HURC" ? "bg-secondary-container/20 text-secondary-fixed-dim" : "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${tx.operatorCode === "HURC" ? "bg-secondary-container/20 text-secondary-fixed-dim" : "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
+                        }`}>
                         {tx.operatorCode}
                       </span>
                     </td>
@@ -238,11 +237,10 @@ export default function TransactionsPage() {
                     </td>
                     <td className="p-table-cell-padding">
                       <span
-                        className={`px-2.5 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${
-                          tx.tapOutStationCode
-                            ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
-                            : "bg-error-container text-on-error-container"
-                        }`}
+                        className={`px-2.5 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${tx.tapOutStationCode
+                          ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
+                          : "bg-error-container text-on-error-container"
+                          }`}
                       >
                         {tx.tapOutStationCode ? (
                           <>

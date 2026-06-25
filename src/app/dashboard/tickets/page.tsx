@@ -37,7 +37,7 @@ export default function TicketsPage() {
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [isOffline, setIsOffline] = useState(false);
-  
+
   // Modal States
   const [selectedTicket, setSelectedTicket] = useState<TicketItem | null>(null);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
@@ -103,7 +103,7 @@ export default function TicketsPage() {
             <AlertTriangle className="h-4 w-4" /> Chế độ mô phỏng (Mock Fallback Mode) được kích hoạt do lỗi kết nối tới API Server.
           </span>
         </div>
-      )}    
+      )}
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -137,7 +137,7 @@ export default function TicketsPage() {
             Tổng doanh thu bán vé
           </h3>
           <div className="text-3xl font-bold text-secondary-fixed-dim font-data-mono">
-            ₫ {tickets.reduce((acc, t) => acc + t.price, 0).toLocaleString()}
+            ₫ {Math.round(tickets.reduce((acc, t) => acc + t.price, 0)).toLocaleString()}
           </div>
         </div>
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm">
@@ -213,9 +213,8 @@ export default function TicketsPage() {
                       {tk.ticketId}
                     </td>
                     <td className="p-table-cell-padding whitespace-nowrap">
-                      <span className={`px-2 py-0.5 rounded text-[11px] font-medium font-label-caps ${
-                        tk.type === "MONTHLY_PASS" ? "bg-secondary-container/20 text-secondary-fixed-dim" : "bg-primary-container text-on-primary-container"
-                      }`}>
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-medium font-label-caps ${tk.type === "MONTHLY_PASS" ? "bg-secondary-container/20 text-secondary-fixed-dim" : "bg-primary-container text-on-primary-container"
+                        }`}>
                         {tk.type === "SINGLE_TRIP" ? "VÉ LƯỢT" : "VÉ THÁNG"}
                       </span>
                     </td>
@@ -231,20 +230,19 @@ export default function TicketsPage() {
                       )}
                     </td>
                     <td className="p-table-cell-padding text-right font-data-mono text-on-surface font-bold whitespace-nowrap">
-                      ₫ {tk.price.toLocaleString()}
+                      ₫ {Math.round(tk.price).toLocaleString()}
                     </td>
                     <td className="p-table-cell-padding text-on-surface-variant font-data-mono whitespace-nowrap">
                       {tk.validFrom} / {tk.validTo}
                     </td>
                     <td className="p-table-cell-padding whitespace-nowrap">
                       <span
-                        className={`px-2.5 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${
-                          tk.status === "ACTIVE"
-                            ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
-                            : tk.status === "USED"
+                        className={`px-2.5 py-0.5 rounded font-body-sm text-[11px] font-medium inline-flex items-center gap-1 ${tk.status === "ACTIVE"
+                          ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
+                          : tk.status === "USED"
                             ? "bg-secondary-container/20 text-secondary-fixed-dim"
                             : "bg-error-container text-on-error-container"
-                        }`}
+                          }`}
                       >
                         {tk.status === "ACTIVE" ? (
                           <>
@@ -328,7 +326,7 @@ export default function TicketsPage() {
                 <div><strong>Tuyến đường:</strong> <span className="text-on-surface">{selectedTicket.fromStationCode} → {selectedTicket.toStationCode}</span></div>
               )}
               <div><strong>Hạn hiệu lực:</strong> <span className="font-data-mono text-on-surface">{selectedTicket.validFrom} đến {selectedTicket.validTo}</span></div>
-              <div><strong>Mệnh giá:</strong> <span className="font-data-mono text-on-surface font-semibold">₫ {selectedTicket.price.toLocaleString()}</span></div>
+              <div><strong>Mệnh giá:</strong> <span className="font-data-mono text-on-surface font-semibold">₫ {Math.round(selectedTicket.price).toLocaleString()}</span></div>
             </div>
           </div>
         </div>

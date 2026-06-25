@@ -41,7 +41,7 @@ interface OperatorShare {
   expectedShare: number;
   actualShare: number;
   roundingAdjustment: number;
-  status: "PENDING" | "CONFIRMED" | "PAID";
+  status: "PENDING" | "CONFIRMED";
   directShare: number;
   proportionalShare: number;
 }
@@ -95,8 +95,7 @@ export default function SettlementsPage() {
   const [pageError, setPageError] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
 
-  // Local tracking for paid status of operators per period
-  const [paidShares, setPaidShares] = useState<Record<string, string[]>>({});
+
 
   // Logs data
   const [logs, setLogs] = useState<ReconciliationLog[]>([]);
@@ -153,9 +152,7 @@ export default function SettlementsPage() {
             expectedShare: cs.expectedRevenue || 0,
             actualShare: cs.shareAmount || 0,
             roundingAdjustment: cs.roundingAdjustment || 0,
-            status: (paidShares[s.period]?.includes(code)
-              ? "PAID"
-              : (s.status === "CONFIRMED" || s.status === "LOCKED" ? "CONFIRMED" : "PENDING")) as OperatorShare["status"],
+            status: (s.status === "CONFIRMED" || s.status === "LOCKED" ? "CONFIRMED" : "PENDING") as OperatorShare["status"],
             directShare: cs.directShare ?? cs.directRevenue ?? cs.directShareAmount ?? 0,
             proportionalShare: cs.proportionalShare ?? cs.proportionalRevenue ?? cs.proportionalShareAmount ?? 0
           };
@@ -163,7 +160,7 @@ export default function SettlementsPage() {
       }
     });
     return sharesMap;
-  }, [rawSettlements, operatorsList, paidShares]);
+  }, [rawSettlements, operatorsList]);
 
   // Load Settlements and Operators from API on mount
   useEffect(() => {
@@ -289,29 +286,6 @@ export default function SettlementsPage() {
     setIsConfirmLockOpen(false);
   };
 
-
-
-  const handleConfirmPaid = (operatorCode: string) => {
-    setPaidShares(prev => {
-      const current = prev[selectedPeriod] || [];
-      if (current.includes(operatorCode)) return prev;
-      return {
-        ...prev,
-        [selectedPeriod]: [...current, operatorCode]
-      };
-    });
-
-    const newLog = {
-      id: 'log-' + Date.now(),
-      timestamp: new Date().toISOString().replace("T", " ").substring(0, 16),
-      period: selectedPeriod,
-      action: "Thanh toán phân chia",
-      status: "SUCCESS" as const,
-      details: "Đã cập nhật trạng thái đã thanh toán cho nhà vận hành " + operatorCode + " trong kỳ quyết toán " + selectedPeriod + ".",
-      performedBy: "Hệ thống"
-    };
-    setLogs(prev => [newLog, ...prev]);
-  };
 
   return (
     <div className="space-y-6">
@@ -525,9 +499,6 @@ export default function SettlementsPage() {
                   <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold">
                     Trạng thái
                   </th>
-                  <th className="p-table-cell-padding font-label-caps text-label-caps text-on-surface-variant uppercase font-semibold text-right">
-                    Hành động
-                  </th>
                 </tr>
               </thead>
               <tbody className="font-body-sm text-body-sm text-xs">
@@ -570,18 +541,12 @@ export default function SettlementsPage() {
                       <td className="p-table-cell-padding">
                         <span
                           className={`px-2 py-0.5 rounded text-[10px] font-semibold inline-flex items-center gap-1 ${
-                            share.status === "PAID"
-                              ? "bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant"
-                              : share.status === "CONFIRMED"
+                            share.status === "CONFIRMED"
                               ? "bg-secondary-container/20 text-secondary-fixed-dim"
                               : "bg-error-container text-on-error-container"
                           }`}
                         >
-                          {share.status === "PAID" ? (
-                            <>
-                              <CheckCircle className="h-3 w-3" /> ĐÃ CHI TRẢ
-                            </>
-                          ) : share.status === "CONFIRMED" ? (
+                          {share.status === "CONFIRMED" ? (
                             <>
                               <CheckCircle className="h-3 w-3" /> ĐÃ XÁC NHẬN
                             </>
@@ -592,25 +557,12 @@ export default function SettlementsPage() {
                           )}
                         </span>
                       </td>
-                      <td className="p-table-cell-padding text-right">
-                        {share.status === "CONFIRMED" ? (
-                          <button
-                            onClick={() => handleConfirmPaid(share.operatorCode)}
-                            className="px-2.5 py-1 bg-tertiary-fixed-dim/20 text-on-tertiary-fixed-variant hover:bg-tertiary-fixed-dim/30 rounded text-[10px] font-bold uppercase cursor-pointer"
-                          >
-                            Đã chuyển khoản
-                          </button>
-                        ) : share.status === "PAID" ? (
-                          <span className="text-[10px] text-on-surface-variant font-medium">Hoàn thành</span>
-                        ) : (
-                          <span className="text-[10px] text-on-surface-variant italic">Yêu cầu khóa sổ</span>
-                        )}
-                      </td>
+
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={9} className="p-8 text-center text-on-surface-variant font-medium">
+                    <td colSpan={8} className="p-8 text-center text-on-surface-variant font-medium">
                       Chưa có bảng phân chia tỷ lệ cho kỳ này.
                     </td>
                   </tr>

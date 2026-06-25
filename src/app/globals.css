@@ -80,28 +80,33 @@
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
+
 @utility text-body-md {
   font-size: 14px;
   line-height: 20px;
   font-weight: 400;
 }
+
 @utility text-display {
   font-size: 30px;
   line-height: 38px;
   letter-spacing: -0.02em;
   font-weight: 700;
 }
+
 @utility text-label-caps {
   font-size: 12px;
   line-height: 16px;
   letter-spacing: 0.05em;
   font-weight: 600;
 }
+
 @utility text-body-sm {
   font-size: 13px;
   line-height: 18px;
   font-weight: 400;
 }
+
 @utility text-headline-sm {
   font-size: 20px;
   line-height: 28px;

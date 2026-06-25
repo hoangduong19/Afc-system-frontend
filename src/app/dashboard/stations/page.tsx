@@ -38,7 +38,7 @@ export default function StationsPage() {
           fetchApi("/api/stations"),
           fetchApi("/api/routes")
         ]);
-        
+
         let rMap: Record<string, string> = {};
         if (Array.isArray(routesData)) {
           setRoutesList(routesData.map((r: any) => ({
@@ -52,7 +52,7 @@ export default function StationsPage() {
         } else {
           rMap = { "rt-1": "R-M1", "rt-2": "R-B01", "rt-3": "R-B02" };
         }
-        
+
         if (Array.isArray(stationsData)) {
           setStations(stationsData.map((s: any) => ({
             id: s.id,

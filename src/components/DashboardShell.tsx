@@ -79,7 +79,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
             Hệ thống quản lý vé
           </p>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto px-4 py-2 space-y-1">
           {menuItems.map((item, idx) => {
             const Icon = item.icon;
@@ -87,19 +87,17 @@ export default function DashboardShell({ children }: DashboardShellProps) {
             return (
               <Link
                 key={idx}
-                className={`flex items-center px-3 py-2 transition-all rounded-lg group ${
-                  isActive
+                className={`flex items-center px-3 py-2 transition-all rounded-lg group ${isActive
                     ? "bg-secondary-container text-on-secondary-container font-bold"
                     : "text-on-primary-container hover:bg-on-primary-fixed-variant"
-                } ${item.disabled ? "opacity-60 cursor-not-allowed" : ""}`}
+                  } ${item.disabled ? "opacity-60 cursor-not-allowed" : ""}`}
                 href={item.disabled ? "#" : item.url}
               >
                 <Icon
-                  className={`mr-3 h-5 w-5 ${
-                    isActive
+                  className={`mr-3 h-5 w-5 ${isActive
                       ? "text-on-secondary-container"
                       : "text-on-primary-container group-hover:text-primary-fixed"
-                  }`}
+                    }`}
                 />
                 <span className="font-label-caps text-label-caps">{item.label}</span>
               </Link>
@@ -142,11 +140,10 @@ export default function DashboardShell({ children }: DashboardShellProps) {
                 return (
                   <Link
                     key={idx}
-                    className={`flex items-center px-3 py-2 transition-all rounded-lg ${
-                      isActive
+                    className={`flex items-center px-3 py-2 transition-all rounded-lg ${isActive
                         ? "bg-secondary-container text-on-secondary-container font-bold"
                         : "text-on-primary-container hover:bg-on-primary-fixed-variant"
-                    } ${item.disabled ? "opacity-60" : ""}`}
+                      } ${item.disabled ? "opacity-60" : ""}`}
                     href={item.disabled ? "#" : item.url}
                     onClick={() => setIsMobileMenuOpen(false)}
                   >

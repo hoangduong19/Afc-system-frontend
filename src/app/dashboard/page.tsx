@@ -2,8 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import {
-  Coins,
-  TrendingUp,
   Ticket,
   AlertTriangle
 } from "lucide-react";
@@ -20,7 +18,6 @@ export default function OverviewPage() {
     transactions: 0,
     anomalies: 0,
     unresolvedAnomalies: 0,
-    revenue: 0,
     activeCards: 0,
     suspendedCards: 0,
     blacklistedCards: 0,
@@ -37,7 +34,6 @@ export default function OverviewPage() {
           setRecentTransactions(txData.content);
           setCounts(prev => ({
             ...prev,
-            revenue: txData.content.reduce((acc: number, t: any) => acc + (t.fareAmount || 0), 0),
             transactions: txData.totalElements || txData.content.length
           }));
         }
@@ -69,34 +65,7 @@ export default function OverviewPage() {
       )}
 
       {/* Summary Bento Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-grid-gutter mb-8">
-        {/* Revenue Card */}
-        <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm hover:bg-surface-container-low transition-colors col-span-1 md:col-span-2 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 text-on-surface pointer-events-none group-hover:scale-110 transition-transform">
-            <Coins className="h-16 w-16" />
-          </div>
-          <h3 className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-            Tổng doanh thu
-          </h3>
-          <div className="flex items-baseline gap-2 mb-4">
-            <span className="font-display text-display text-on-surface">
-              ₫ {Math.round(counts.revenue).toLocaleString()}
-            </span>
-            {counts.revenue > 0 && (
-              <span className="text-tertiary-fixed-dim font-body-sm text-body-sm flex items-center gap-0.5">
-                <TrendingUp className="h-3.5 w-3.5" /> —
-              </span>
-            )}
-          </div>
-          {/* Sparkline simulation */}
-          <div className="h-12 w-full bg-surface-container-high rounded-md overflow-hidden relative flex items-end justify-between px-1">
-            <div className="w-[22%] bg-secondary/50 h-[40%] rounded-t-sm" />
-            <div className="w-[22%] bg-secondary/60 h-[65%] rounded-t-sm" />
-            <div className="w-[22%] bg-secondary/80 h-[100%] rounded-t-sm" />
-            <div className="w-[22%] bg-secondary h-[80%] rounded-t-sm" />
-          </div>
-        </div>
-
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-grid-gutter mb-8">
         {/* Trips Card */}
         <div className="bg-surface-container-lowest border border-outline-variant rounded-xl p-5 shadow-sm hover:bg-surface-container-low transition-colors">
           <div className="flex justify-between items-start mb-2">
@@ -113,9 +82,8 @@ export default function OverviewPage() {
           </p>
         </div>
 
-
         {/* Anomalies Card (Critical Warning) */}
-        <div className="bg-error-container border border-error/20 rounded-xl p-5 shadow-sm col-span-1 md:col-span-2 lg:col-span-1 flex flex-col justify-between">
+        <div className="bg-error-container border border-error/20 rounded-xl p-5 shadow-sm flex flex-col justify-between">
           <div>
             <div className="flex justify-between items-start mb-2">
               <h3 className="font-label-caps text-label-caps text-on-error-container uppercase">
@@ -134,8 +102,6 @@ export default function OverviewPage() {
             Xem chi tiết
           </Link>
         </div>
-
-
       </div>
 
 

@@ -54,7 +54,7 @@ export default function DiscountsPage() {
   const [discountType, setDiscountType] = useState<"PERCENT" | "FIXED">("PERCENT");
   const [discountValue, setDiscountValue] = useState(50);
   const [effectiveFrom, setEffectiveFrom] = useState("2026-01-01");
-  const [effectiveTo, setEffectiveTo] = useState("2026-12-31");
+  const [effectiveTo, setEffectiveTo] = useState("");
 
   useEffect(() => {
     async function loadDiscounts() {
@@ -85,7 +85,7 @@ export default function DiscountsPage() {
     setDiscountType("PERCENT");
     setDiscountValue(50);
     setEffectiveFrom("2026-01-01");
-    setEffectiveTo("2026-12-31");
+    setEffectiveTo("");
     setModalError(null);
     setIsModalOpen(true);
   };
@@ -97,7 +97,7 @@ export default function DiscountsPage() {
     setDiscountType(ds.discountType);
     setDiscountValue(ds.discountValue);
     setEffectiveFrom(ds.effectiveFrom);
-    setEffectiveTo(ds.effectiveTo);
+    setEffectiveTo(ds.effectiveTo || "");
     setModalError(null);
     setIsModalOpen(true);
   };
@@ -144,7 +144,7 @@ export default function DiscountsPage() {
             discountType,
             discountValue,
             effectiveFrom,
-            effectiveTo
+            effectiveTo: effectiveTo || null
           })
         });
         setDiscounts([...discounts, {
@@ -153,7 +153,7 @@ export default function DiscountsPage() {
           discountType: newDs.discountType || discountType,
           discountValue: newDs.discountValue || discountValue,
           effectiveFrom: newDs.effectiveFrom || effectiveFrom,
-          effectiveTo: newDs.effectiveTo || effectiveTo,
+          effectiveTo: newDs.effectiveTo || "",
           status: newDs.status || "ACTIVE"
         }]);
         setIsModalOpen(false);
@@ -169,7 +169,7 @@ export default function DiscountsPage() {
             discountType,
             discountValue,
             effectiveFrom,
-            effectiveTo
+            effectiveTo: effectiveTo || null
           })
         });
         setDiscounts(
@@ -181,7 +181,7 @@ export default function DiscountsPage() {
                   discountType: updatedDs.discountType || discountType,
                   discountValue: updatedDs.discountValue !== undefined ? updatedDs.discountValue : discountValue,
                   effectiveFrom: updatedDs.effectiveFrom || effectiveFrom,
-                  effectiveTo: updatedDs.effectiveTo || effectiveTo
+                  effectiveTo: updatedDs.effectiveTo || ""
                 }
               : ds
           )
@@ -333,7 +333,7 @@ export default function DiscountsPage() {
                       {ds.discountType === "PERCENT" ? `${ds.discountValue}%` : `₫ ${ds.discountValue.toLocaleString()}`}
                     </td>
                     <td className="p-table-cell-padding font-data-mono text-on-surface-variant whitespace-nowrap">
-                      {ds.effectiveFrom} / {ds.effectiveTo}
+                      {ds.effectiveFrom} / {ds.effectiveTo || "Vô thời hạn"}
                     </td>
                     <td className="p-table-cell-padding whitespace-nowrap">
                       <span
@@ -487,7 +487,6 @@ export default function DiscountsPage() {
                   </label>
                   <input
                     type="date"
-                    required
                     value={effectiveTo}
                     onChange={(e) => setEffectiveTo(e.target.value)}
                     className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"

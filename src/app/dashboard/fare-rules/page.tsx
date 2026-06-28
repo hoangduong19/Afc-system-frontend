@@ -80,7 +80,7 @@ export default function FareRulesPage() {
   const [minPrice, setMinPrice] = useState(8000);
   const [maxPrice, setMaxPrice] = useState(15000);
   const [effectiveFrom, setEffectiveFrom] = useState("2026-01-01");
-  const [effectiveTo, setEffectiveTo] = useState("2026-12-31");
+  const [effectiveTo, setEffectiveTo] = useState("");
   
   // Pass Prices Configuration lists by transit mode
   const [metroPassPrices, setMetroPassPrices] = useState<PassPrice[]>([
@@ -142,7 +142,7 @@ export default function FareRulesPage() {
     setMinPrice(8000);
     setMaxPrice(15000);
     setEffectiveFrom("2026-01-01");
-    setEffectiveTo("2026-12-31");
+    setEffectiveTo("");
     setMetroPassPrices([
       { durationType: "DAILY", durationMonths: 1, scope: null, amount: 20000 }
     ]);
@@ -166,7 +166,7 @@ export default function FareRulesPage() {
     setMinPrice(rule.minPrice);
     setMaxPrice(rule.maxPrice);
     setEffectiveFrom(rule.effectiveFrom);
-    setEffectiveTo(rule.effectiveTo);
+    setEffectiveTo(rule.effectiveTo || "");
     
     const loadedPrices: PassPrice[] = rule.passPrices && rule.passPrices.length > 0 ? rule.passPrices.map(p => ({
       durationType: p.durationType as any,
@@ -309,7 +309,7 @@ export default function FareRulesPage() {
             minPrice,
             maxPrice,
             effectiveFrom,
-            effectiveTo,
+            effectiveTo: effectiveTo || null,
             passPrices: formattedPassPrices
           })
         });
@@ -322,7 +322,7 @@ export default function FareRulesPage() {
           minPrice: newRule.minPrice || minPrice,
           maxPrice: newRule.maxPrice || maxPrice,
           effectiveFrom: newRule.effectiveFrom || effectiveFrom,
-          effectiveTo: newRule.effectiveTo || effectiveTo,
+          effectiveTo: newRule.effectiveTo || "",
           status: newRule.status || "ACTIVE",
           passPrices: newRule.passPrices || current,
           version: newRule.version
@@ -342,7 +342,7 @@ export default function FareRulesPage() {
             minPrice,
             maxPrice,
             effectiveFrom,
-            effectiveTo,
+            effectiveTo: effectiveTo || null,
             passPrices: formattedPassPrices
           })
         });
@@ -358,7 +358,7 @@ export default function FareRulesPage() {
                   minPrice: updatedRule.minPrice !== undefined ? updatedRule.minPrice : minPrice,
                   maxPrice: updatedRule.maxPrice !== undefined ? updatedRule.maxPrice : maxPrice,
                   effectiveFrom: updatedRule.effectiveFrom || effectiveFrom,
-                  effectiveTo: updatedRule.effectiveTo || effectiveTo,
+                  effectiveTo: updatedRule.effectiveTo || "",
                   passPrices: updatedRule.passPrices || current,
                   version: updatedRule.version || r.version
                 }
@@ -564,7 +564,7 @@ export default function FareRulesPage() {
                       ₫ {rule.minPrice.toLocaleString()} - ₫ {rule.maxPrice.toLocaleString()}
                     </td>
                     <td className="p-table-cell-padding font-data-mono text-on-surface-variant text-xs whitespace-nowrap">
-                      {rule.effectiveFrom} / {rule.effectiveTo}
+                      {rule.effectiveFrom} / {rule.effectiveTo || "Vô thời hạn"}
                     </td>
                     <td className="p-table-cell-padding text-xs text-on-surface-variant min-w-[320px] max-w-[450px]">
                       <div className="flex flex-wrap gap-1 items-center">
@@ -812,7 +812,6 @@ export default function FareRulesPage() {
                   </label>
                   <input
                     type="date"
-                    required
                     value={effectiveTo}
                     onChange={(e) => setEffectiveTo(e.target.value)}
                     className="w-full px-3 py-2 bg-surface-bright border border-outline-variant rounded text-on-surface focus:ring-2 focus:ring-secondary outline-none text-sm font-data-mono"

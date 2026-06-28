@@ -71,12 +71,12 @@ export default function DashboardShell({ children }: DashboardShellProps) {
       <aside className="hidden md:flex flex-col h-screen w-sidebar-width fixed left-0 top-0 bg-primary-container border-r border-outline-variant z-50">
         <div className="px-4 py-6">
           <Link href="/dashboard" className="block focus:outline-none">
-            <h1 className="font-display text-display text-primary-fixed-dim tracking-tight mb-1">
-              FMC Level 5
+            <h1 className="font-display text-lg font-bold text-primary-fixed-dim tracking-tight mb-1 leading-snug">
+              Hệ thống trung tâm
             </h1>
           </Link>
-          <p className="font-body-sm text-body-sm text-on-primary-container">
-            Hệ thống quản lý vé
+          <p className="font-body-sm text-xs text-on-primary-container uppercase tracking-wider font-semibold">
+            Thanh toán bù trừ
           </p>
         </div>
 
@@ -120,10 +120,10 @@ export default function DashboardShell({ children }: DashboardShellProps) {
           <aside className="relative flex flex-col w-sidebar-width max-w-xs h-full bg-primary-container border-r border-outline-variant p-4 space-y-4 shadow-xl z-50">
             <div className="flex justify-between items-center pb-2 border-b border-outline-variant">
               <div>
-                <h1 className="font-display text-xl font-bold text-primary-fixed-dim">
-                  FMC Level 5
+                <h1 className="font-display text-lg font-bold text-primary-fixed-dim leading-snug">
+                  Hệ thống trung tâm
                 </h1>
-                <p className="text-xs text-on-primary-container">Hệ thống quản lý vé</p>
+                <p className="text-xs text-on-primary-container uppercase tracking-wider font-semibold">Thanh toán bù trừ</p>
               </div>
               <button
                 className="p-1 rounded-full text-on-primary-container hover:bg-on-primary-fixed-variant"

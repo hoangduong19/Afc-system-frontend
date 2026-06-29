@@ -23,7 +23,7 @@ interface FareDiscount {
   effectiveFrom: string;
   effectiveTo: string;
   status: "ACTIVE" | "INACTIVE";
-  version?: number;
+  version: number;
 }
 
 export default function DiscountsPage() {
@@ -68,7 +68,8 @@ export default function DiscountsPage() {
             discountValue: d.discountValue || 0,
             effectiveFrom: d.effectiveFrom || "",
             effectiveTo: d.effectiveTo || "",
-            status: d.status || "ACTIVE"
+            status: d.status || "ACTIVE",
+            version: d.version || 1
           })));
         }
       } catch (err: any) {
@@ -154,7 +155,8 @@ export default function DiscountsPage() {
           discountValue: newDs.discountValue || discountValue,
           effectiveFrom: newDs.effectiveFrom || effectiveFrom,
           effectiveTo: newDs.effectiveTo || "",
-          status: newDs.status || "ACTIVE"
+          status: newDs.status || "ACTIVE",
+          version: newDs.version || 1
         }]);
         setIsModalOpen(false);
       } catch (err: any) {
@@ -181,7 +183,8 @@ export default function DiscountsPage() {
                   discountType: updatedDs.discountType || discountType,
                   discountValue: updatedDs.discountValue !== undefined ? updatedDs.discountValue : discountValue,
                   effectiveFrom: updatedDs.effectiveFrom || effectiveFrom,
-                  effectiveTo: updatedDs.effectiveTo || ""
+                  effectiveTo: updatedDs.effectiveTo || "",
+                  version: updatedDs.version || ds.version
                 }
               : ds
           )
@@ -196,42 +199,21 @@ export default function DiscountsPage() {
 
   // Helper to compute versions for each passengerType group
   const getDiscountsWithVersionsAndSorted = () => {
-    const groups: Record<string, FareDiscount[]> = {};
-    discounts.forEach(d => {
-      if (!groups[d.passengerType]) {
-        groups[d.passengerType] = [];
-      }
-      groups[d.passengerType].push(d);
-    });
-
-    const discountIdToVersion: Record<string, number> = {};
-    Object.keys(groups).forEach(type => {
-      groups[type].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
-      groups[type].forEach((d, idx) => {
-        discountIdToVersion[d.id] = idx + 1;
-      });
-    });
-
     const filtered = discounts.filter((ds) => {
       return passengerFilter === "ALL" || ds.passengerType === passengerFilter;
     });
 
-    const withVersions = filtered.map(d => ({
-      ...d,
-      version: discountIdToVersion[d.id] || 1
-    }));
-
-    withVersions.sort((a, b) => {
-      if (a.status === b.status) {
-        if (a.passengerType !== b.passengerType) {
-          return a.passengerType.localeCompare(b.passengerType);
-        }
-        return b.version - a.version;
+    filtered.sort((a, b) => {
+      if (a.status !== b.status) {
+        return a.status === "ACTIVE" ? -1 : 1;
       }
-      return a.status === "ACTIVE" ? -1 : 1;
+      if (a.passengerType !== b.passengerType) {
+        return a.passengerType.localeCompare(b.passengerType);
+      }
+      return b.version - a.version;
     });
 
-    return withVersions;
+    return filtered;
   };
 
   return (
